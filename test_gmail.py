@@ -1,6 +1,6 @@
-from services.gmail_service import fetch_rfq_replies
+from services.gmail_service import extract_rfq_data
 
-emails = fetch_rfq_replies()
+emails = extract_rfq_data()
 
 print("Emails Found:")
 for e in emails:

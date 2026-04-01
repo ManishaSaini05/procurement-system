@@ -84,23 +84,870 @@
 
     #return emails
 
+# import base64
+# import re
+# import sqlite3
+# import requests
+# import json
+
+# from googleapiclient.discovery import build
+# from google.oauth2.credentials import Credentials
+# from google_auth_oauthlib.flow import InstalledAppFlow
+# from google.auth.transport.requests import Request
+
+# import os
+# import pickle
+
+# SCOPES = ['https://www.googleapis.com/auth/gmail.modify']
+
+
+# # ==============================
+# # GMAIL CONNECTION
+# # ==============================
+
+# def get_gmail_service():
+
+#     creds = None
+
+#     if os.path.exists("token.pickle"):
+#         with open("token.pickle", "rb") as token:
+#             creds = pickle.load(token)
+
+#     if not creds or not creds.valid:
+
+#         if creds and creds.expired and creds.refresh_token:
+#             creds.refresh(Request())
+
+#         else:
+
+#             flow = InstalledAppFlow.from_client_secrets_file(
+#                 "credentials.json",
+#                 SCOPES
+#             )
+
+#             creds = flow.run_local_server(port=0)
+
+#         with open("token.pickle", "wb") as token:
+#             pickle.dump(creds, token)
+
+#     return build("gmail", "v1", credentials=creds)
+
+# token_match = re.search(r'RFQ TOKEN:\s*([a-zA-Z0-9\-]+)', body)
+
+# if not token_match:
+#     print("RFQ token not found")
+#     continue
+
+# rfq_token = token_match.group(1)
+# # ==============================
+# # AI QUOTE EXTRACTION (OLLAMA)
+# # ==============================
+
+# def extract_vendor_quote(body):
+
+#     prompt = f"""
+# Extract vendor quotation details from the email.
+
+# Return JSON format only.
+
+# Fields:
+# unit_price
+# delivery_days
+# payment_terms
+
+# Email:
+# {body}
+# """
+
+#     try:
+
+#         response = requests.post(
+#             "http://localhost:11434/api/generate",
+#             json={
+#                 "model": "llama3",
+#                 "prompt": prompt,
+#                 "stream": False
+#             }
+#         )
+
+#         result = response.json()["response"]
+
+#         data = json.loads(result)
+
+#         return data
+
+#     except:
+
+#         return {}
+
+
+# # ==============================
+# # STORE VENDOR QUOTE
+# # ==============================
+
+# def save_quote(rfq_id, sender_email, body):
+
+#     conn = sqlite3.connect("procurement.db")
+#     cursor = conn.cursor()
+
+#     # Check if already processed
+#     cursor.execute("""
+#     SELECT status FROM rfq_vendors
+#     WHERE rfq_id=? AND vendor_email=?
+#     """, (rfq_id, sender_email))
+
+#     row = cursor.fetchone()
+
+#     if not row:
+#         print("Vendor not found in RFQ list")
+#         conn.close()
+#         return
+
+#     if row[0] == "Quote Received":
+#         print("Quote already processed")
+#         conn.close()
+#         return
+
+#     # AI Extraction
+#     ai_data = extract_vendor_quote(body)
+
+#     unit_price = ai_data.get("unit_price")
+#     delivery_days = ai_data.get("delivery_days")
+#     payment_terms = ai_data.get("payment_terms")
+
+#     print("AI Extracted Data:", ai_data)
+
+#     # Update database
+#     cursor.execute("""
+#     UPDATE rfq_vendors
+#     SET status='Quote Received'
+#     WHERE rfq_id=? AND vendor_email=?
+#     """, (rfq_id, sender_email))
+
+#     cursor.execute("""
+#     INSERT INTO vendor_quotes
+#     (material_id, vendor_id, unit_price, delivery_days, payment_terms)
+#     VALUES (?, ?, ?, ?, ?)
+#     """, (rfq_id, 1, unit_price, delivery_days, payment_terms))
+
+#     conn.commit()
+#     conn.close()
+
+#     print("Vendor quote saved")
+
+
+# # ==============================
+# # FETCH RFQ REPLIES
+# # ==============================
+
+# def fetch_rfq_replies():
+
+#     conn = sqlite3.connect("procurement.db")
+#     cursor = conn.cursor()
+
+#     cursor.execute("""
+#     SELECT id FROM rfq_vendors
+#     WHERE rfq_id=? AND vendor_email=?
+#     """, (rfq_id, sender_email))
+
+#     vendor = cursor.fetchone()
+
+#     if not vendor:
+#         print("Email not from RFQ vendor — skipping")
+#         continue
+
+#     print("Checking mailbox for RFQ replies...")
+
+#     service = get_gmail_service()
+
+#     # results = service.users().messages().list(
+#     #     userId='me',
+#     #     labelIds=['INBOX'],
+#     #     maxResults=20
+#     # ).execute()
+#     results = service.users().messages().list(
+#         userId='me',
+#         labelIds=['INBOX'],
+#         q="subject:RFQ- newer_than:7d"
+#     ).execute()
+
+#     messages = results.get('messages', [])
+
+#     print("Messages found:", len(messages))
+
+#     for message in messages:
+
+#         msg = service.users().messages().get(
+#             userId='me',
+#             id=message['id']
+#         ).execute()
+
+#         payload = msg['payload']
+#         headers = payload.get("headers")
+
+#         subject = ""
+#         sender = ""
+
+#         for header in headers:
+
+#             if header['name'] == 'Subject':
+#                 subject = header['value']
+
+#             if header['name'] == 'From':
+#                 sender = header['value']
+
+#         # STRICT RFQ SUBJECT CHECK
+#         match = re.match(r'RFQ-(\d+)\s*\|\s*PRJ-\d+\s*\|', subject)
+
+#         if not match:
+#             continue
+
+#         rfq_id = int(match.group(1))
+
+#         # Extract email
+#         sender_email = re.findall(r'<(.+?)>', sender)
+
+#         if sender_email:
+#             sender_email = sender_email[0]
+#         else:
+#             sender_email = sender
+
+#         # GET EMAIL BODY
+#         body = ""
+
+#         if 'parts' in payload:
+
+#             for part in payload['parts']:
+
+#                 if part['mimeType'] == 'text/plain':
+
+#                     data = part['body'].get('data')
+
+#                     if data:
+#                         decoded = base64.urlsafe_b64decode(data)
+#                         body = decoded.decode()
+
+#         else:
+
+#             data = payload['body'].get('data')
+
+#             if data:
+#                 decoded = base64.urlsafe_b64decode(data)
+#                 body = decoded.decode()
+
+#         print("\nVendor Reply Found")
+#         print("RFQ:", rfq_id)
+#         print("Vendor:", sender_email)
+#         print("EMAIL BODY:")
+#         print(body)
+
+#         save_quote(rfq_id, sender_email, body)
+
+#     print("\nFinished checking emails.")
+
+# import base64
+# import re
+# import sqlite3
+# import os
+# import pickle
+
+# from googleapiclient.discovery import build
+# from google_auth_oauthlib.flow import InstalledAppFlow
+# from google.auth.transport.requests import Request
+# import sqlite3
+
+# from services.db import get_connection
+# conn = get_connection()
+# cursor = conn.cursor()
+
+# from services.ai_extractor import extract_vendor_quote
+
+
+# SCOPES = ['https://www.googleapis.com/auth/gmail.modify']
+
+
+# # =====================================
+# # GMAIL CONNECTION
+# # =====================================
+
+# def get_gmail_service():
+
+#     creds = None
+
+#     if os.path.exists("token.pickle"):
+#         with open("token.pickle", "rb") as token:
+#             creds = pickle.load(token)
+
+#     if not creds or not creds.valid:
+
+#         if creds and creds.expired and creds.refresh_token:
+#             creds.refresh(Request())
+
+#         else:
+
+#             flow = InstalledAppFlow.from_client_secrets_file(
+#                 "credentials.json",
+#                 SCOPES
+#             )
+
+#             creds = flow.run_local_server(port=0)
+
+#         with open("token.pickle", "wb") as token:
+#             pickle.dump(creds, token)
+
+#     return build("gmail", "v1", credentials=creds)
+
+
+# # =====================================
+# # SAVE VENDOR QUOTE
+# # =====================================
+
+# def save_quote(rfq_id, sender_email, body):
+
+#     # conn = sqlite3.connect("procurement.db")
+#     # cursor = conn.cursor()
+
+#     cursor.execute("""
+#     SELECT status FROM rfq_vendors
+#     WHERE rfq_id=? AND vendor_email=?
+#     """, (rfq_id, sender_email))
+
+#     row = cursor.fetchone()
+
+#     if not row:
+#         print("Vendor not found in RFQ list")
+#         conn.close()
+#         return
+
+#     if row[0] == "Quote Received":
+#         print("Quote already processed")
+#         conn.close()
+#         return
+    
+#     print("EMAIL BODY:")
+#     print(body)
+#     print("---------------------")
+
+#     # ======================
+#     # AI EXTRACTION
+#     # ======================
+
+#     ai_data = extract_vendor_quote(body)
+
+#     unit_price = ai_data.get("unit_price")
+#     delivery_days = ai_data.get("delivery_time")
+#     payment_terms = ai_data.get("payment_terms")
+
+#     print("AI Extracted:", ai_data)
+#     ai_data = extract_vendor_quote(body)
+
+#     unit_price = ai_data.get("unit_price")
+#     delivery_days = ai_data.get("delivery_days")
+#     payment_terms = ai_data.get("payment_terms")
+
+# #     import re
+
+# # # Unit price fallback
+# #     if not unit_price:
+# #         match = re.search(r'(\d+)\s*(INR|Rs|USD)?', body, re.IGNORECASE)
+# #         if match:
+# #             unit_price = match.group(1)
+
+# # # Delivery fallback
+# #     if not delivery_days:
+# #         match = re.search(r'delivery[:\- ]*(.+)', body, re.IGNORECASE)
+# #         if match:
+# #             delivery_days = match.group(1).strip()
+
+# # # Payment fallback
+# #     if not payment_terms:
+# #         match = re.search(r'payment[:\- ]*(.+)', body, re.IGNORECASE)
+# #         if match:
+# #             payment_terms = match.group(1).strip()
+# #     print("Extracted:", unit_price, delivery_days, payment_terms)
+#     # import re
+
+#     # price_match = re.search(r"unit\s*price\s*[:\-]?\s*(\d+)", body, re.I)
+#     # delivery_match = re.search(r"delivery\s*[:\-]?\s*(.*)", body, re.I)
+#     # payment_match = re.search(r"payment\s*terms\s*[:\-]?\s*(.*)", body, re.I)
+
+#     # unit_price = price_match.group(1) if price_match else None
+#     # delivery = delivery_match.group(1) if delivery_match else None
+#     # payment = payment_match.group(1) if payment_match else None
+
+#     # cursor.execute("""
+#     # UPDATE rfq_vendors
+#     # SET status='Quote Received'
+#     # WHERE rfq_id=? AND vendor_email=?
+#     # """, (rfq_id, sender_email))
+
+#     # cursor.execute("""
+#     # INSERT INTO vendor_quotes
+#     # (material_id, vendor_id, unit_price, delivery_days, payment_terms)
+#     # VALUES (?, ?, ?, ?, ?)
+#     # """, (rfq_id, 1, unit_price, delivery_days, payment_terms))
+
+#     # cursor.execute("""
+#     # UPDATE rfq_vendors
+#     # SET
+#     #     unit_price = ?,
+#     #     delivery_time = ?,
+#     #     payment_terms = ?,
+#     #     raw_email = ?,
+#     #     received_date = datetime('now'),
+#     #     status = 'Quote Received'
+#     # WHERE rfq_id = ? AND vendor_email = ?
+#     # """, (unit_price, delivery_days, payment_terms, body, rfq_id, sender_email))
+#     # cursor.execute("""
+#     # UPDATE rfq_vendors
+#     # SET unit_price=?, delivery_time=?, payment_terms=?
+#     # WHERE rfq_id=? AND vendor_name=?
+#     # """, (
+#     #     row["Unit Price"],
+#     #     row["Delivery Time"],
+#     #     row["Payment Terms"],
+#     #     row["RFQ ID"],
+#     #     row["Vendor"]
+#     # ))
+
+#     # conn.commit()
+#     # conn.close()
+#     import re
+
+#     cursor.execute("SELECT id, raw_email FROM rfq_vendors WHERE unit_price IS NULL")
+#     rows = cursor.fetchall()
+
+#     for r in rows:
+#         email = r["raw_email"]
+
+#         if email:
+#             price = re.search(r"unit\s*price.*?(\d+)", email, re.I)
+#             delivery = re.search(r"delivery.*?:\s*(.*)", email, re.I)
+#             payment = re.search(r"payment.*?:\s*(.*)", email, re.I)
+
+#             unit_price = float(price.group(1)) if price else None
+#             delivery_time = delivery.group(1) if delivery else None
+#             payment_terms = payment.group(1) if payment else None
+
+#             cursor.execute("""
+#             UPDATE rfq_vendors
+#             SET unit_price=?, delivery_time=?, payment_terms=?
+#             WHERE id=?
+#             """, (unit_price, delivery_time, payment_terms, r["id"]))
+
+#     conn.commit()
+
+#     print("Quote stored successfully")
+
+
+# # =====================================
+# # EMAIL BODY EXTRACTOR
+# # =====================================
+
+# def get_email_body(payload):
+
+#     body = ""
+
+#     if 'parts' in payload:
+
+#         for part in payload['parts']:
+
+#             mime = part.get("mimeType")
+
+#             if mime == "text/plain":
+
+#                 data = part['body'].get('data')
+
+#                 if data:
+#                     decoded = base64.urlsafe_b64decode(data)
+#                     body = decoded.decode(errors="ignore")
+#                     return body
+
+#             if 'parts' in part:
+
+#                 for subpart in part['parts']:
+
+#                     if subpart.get("mimeType") == "text/plain":
+
+#                         data = subpart['body'].get('data')
+
+#                         if data:
+#                             decoded = base64.urlsafe_b64decode(data)
+#                             body = decoded.decode(errors="ignore")
+#                             return body
+
+#     else:
+
+#         data = payload['body'].get('data')
+
+#         if data:
+#             decoded = base64.urlsafe_b64decode(data)
+#             body = decoded.decode(errors="ignore")
+
+#     return body
+
+
+# # =====================================
+# # FETCH RFQ EMAIL REPLIES
+# # =====================================
+
+# def fetch_rfq_replies():
+
+#     print("Checking mailbox for RFQ replies...")
+
+#     service = get_gmail_service()
+
+#     results = service.users().messages().list(
+#         userId='me',
+#         labelIds=['INBOX'],
+#         #q="subject:RFQ newer_than:7d"
+#         q="subject:RFQ is:unread"
+#     ).execute()
+
+#     messages = results.get('messages', [])
+
+#     print("Messages found:", len(messages))
+
+#     for message in messages:
+
+#         msg = service.users().messages().get(
+#             userId='me',
+#             id=message['id']
+#         ).execute()
+
+#         payload = msg['payload']
+#         headers = payload.get("headers")
+
+#         subject = ""
+#         sender = ""
+
+#         for header in headers:
+
+#             if header['name'] == 'Subject':
+#                 subject = header['value']
+
+#             if header['name'] == 'From':
+#                 sender = header['value']
+
+#         # ======================
+#         # RFQ ID EXTRACT
+#         # ======================
+
+#         rfq_match = re.search(r"RFQ[- ]?(\d+)", subject, re.IGNORECASE)
+
+#         if not rfq_match:
+#             continue
+
+#         rfq_id = int(rfq_match.group(1))
+
+#         # ======================
+#         # EMAIL EXTRACT
+#         # ======================
+
+#         sender_email = re.findall(r'<(.+?)>', sender)
+
+#         if sender_email:
+#             sender_email = sender_email[0]
+#         else:
+#             sender_email = sender
+
+#         body = get_email_body(payload)
+
+#         print("\nVendor Reply Found")
+#         print("RFQ:", rfq_id)
+#         print("Vendor:", sender_email)
+
+#         save_quote(rfq_id, sender_email, body)
+
+#     print("Mailbox scan complete")
+
+# import base64
+# import re
+# import os
+# import pickle
+
+# from googleapiclient.discovery import build
+# from google_auth_oauthlib.flow import InstalledAppFlow
+# from google.auth.transport.requests import Request
+
+# from services.db import get_connection
+# from services.ai_extractor import extract_vendor_quote
+
+# SCOPES = ['https://www.googleapis.com/auth/gmail.modify']
+
+
+# # =====================================
+# # GMAIL CONNECTION
+# # =====================================
+
+# def get_gmail_service():
+
+#     creds = None
+
+#     if os.path.exists("token.pickle"):
+#         with open("token.pickle", "rb") as token:
+#             creds = pickle.load(token)
+
+#     if not creds or not creds.valid:
+
+#         if creds and creds.expired and creds.refresh_token:
+#             creds.refresh(Request())
+
+#         else:
+#             flow = InstalledAppFlow.from_client_secrets_file(
+#                 "credentials.json",
+#                 SCOPES
+#             )
+#             creds = flow.run_local_server(port=0)
+
+#         with open("token.pickle", "wb") as token:
+#             pickle.dump(creds, token)
+
+#     service = build("gmail", "v1", credentials=creds)
+
+#     return service
+
+
+# # =====================================
+# # SAVE VENDOR QUOTE
+# # =====================================
+
+# def save_quote(rfq_id, sender_email, body):
+
+#     conn = get_connection()
+#     cursor = conn.cursor()
+
+#     cursor.execute("""
+#         SELECT status FROM vendor_quotes
+#         WHERE rfq_id=? AND vendor_email=?
+#     """, (rfq_id, sender_email))
+
+#     row = cursor.fetchone()
+
+#     if not row:
+#         print("Vendor not found in RFQ list")
+#         conn.close()
+#         return
+
+#     if row["status"] == "Quote Received":
+#         print("Quote already processed")
+#         conn.close()
+#         return
+
+#     print("EMAIL BODY:")
+#     print(body)
+#     print("----------------------")
+
+#     # ======================
+#     # AI EXTRACTION
+#     # ======================
+
+#     ai_data = extract_vendor_quote(body)
+
+#     unit_price = ai_data.get("unit_price")
+#     delivery_days = ai_data.get("delivery_days")
+#     payment_terms = ai_data.get("payment_terms")
+
+#     print("AI Extracted:", ai_data)
+
+#     # ======================
+#     # FALLBACK REGEX (if AI fails)
+#     # ======================
+
+#     if not unit_price:
+#         price_match = re.search(r'(\d{3,6})', body)
+#         if price_match:
+#             unit_price = float(price_match.group(1))
+
+#     if not delivery_days:
+#         delivery_match = re.search(r'(\d+\s*(days|weeks))', body, re.IGNORECASE)
+#         if delivery_match:
+#             delivery_days = delivery_match.group(1)
+
+#     if not payment_terms:
+#         payment_match = re.search(r'(\d+\s*days\s*credit)', body, re.IGNORECASE)
+#         if payment_match:
+#             payment_terms = payment_match.group(1)
+
+#     print("Final Extracted:",
+#           unit_price,
+#           delivery_days,
+#           payment_terms)
+
+#     # ======================
+#     # SAVE TO DATABASE
+#     # ======================
+
+#     cursor.execute("""
+#         UPDATE vendor_quotes
+#         SET
+#             unit_price = ?,
+#             delivery_time = ?,
+#             payment_terms = ?,
+#             raw_email = ?,
+#             email_received_date = datetime('now'),
+#             status = 'Quote Received'
+#         WHERE rfq_id = ? AND vendor_email = ?
+#     """, (
+#         unit_price,
+#         delivery_days,
+#         payment_terms,
+#         body,
+#         rfq_id,
+#         sender_email
+#     ))
+
+#     conn.commit()
+#     conn.close()
+
+#     print("Quote stored successfully")
+
+
+# # =====================================
+# # EMAIL BODY EXTRACTOR
+# # =====================================
+
+# def get_email_body(payload):
+
+#     body = ""
+
+#     if 'parts' in payload:
+
+#         for part in payload['parts']:
+
+#             mime = part.get("mimeType")
+
+#             if mime == "text/plain":
+
+#                 data = part['body'].get('data')
+
+#                 if data:
+#                     decoded = base64.urlsafe_b64decode(data)
+#                     body = decoded.decode(errors="ignore")
+#                     return body
+
+#             if 'parts' in part:
+
+#                 for subpart in part['parts']:
+
+#                     if subpart.get("mimeType") == "text/plain":
+
+#                         data = subpart['body'].get('data')
+
+#                         if data:
+#                             decoded = base64.urlsafe_b64decode(data)
+#                             body = decoded.decode(errors="ignore")
+#                             return body
+
+#     else:
+
+#         data = payload['body'].get('data')
+
+#         if data:
+#             decoded = base64.urlsafe_b64decode(data)
+#             body = decoded.decode(errors="ignore")
+
+#     return body
+
+
+# # =====================================
+# # FETCH RFQ EMAIL REPLIES
+# # =====================================
+
+# def fetch_rfq_replies():
+
+#     print("Checking mailbox for RFQ replies...")
+
+#     service = get_gmail_service()
+
+#     results = service.users().messages().list(
+#         userId='me',
+#         labelIds=['INBOX'],
+#         q="subject:RFQ is:unread"
+#     ).execute()
+
+#     messages = results.get('messages', [])
+
+#     print("Messages found:", len(messages))
+
+#     for message in messages:
+
+#         msg = service.users().messages().get(
+#             userId='me',
+#             id=message['id']
+#         ).execute()
+
+#         payload = msg['payload']
+#         headers = payload.get("headers")
+
+#         subject = ""
+#         sender = ""
+
+#         for header in headers:
+
+#             if header['name'] == 'Subject':
+#                 subject = header['value']
+
+#             if header['name'] == 'From':
+#                 sender = header['value']
+
+#         # ======================
+#         # RFQ ID EXTRACT
+#         # ======================
+
+#         rfq_match = re.search(r"RFQ[- ]?(\d+)", subject, re.IGNORECASE)
+
+#         if not rfq_match:
+#             continue
+
+#         rfq_id = int(rfq_match.group(1))
+
+#         # ======================
+#         # EXTRACT SENDER EMAIL
+#         # ======================
+
+#         sender_email = re.findall(r'<(.+?)>', sender)
+
+#         if sender_email:
+#             sender_email = sender_email[0]
+#         else:
+#             sender_email = sender
+
+#         # ======================
+#         # EMAIL BODY
+#         # ======================
+
+#         body = get_email_body(payload)
+
+#         print("\nVendor Reply Found")
+#         print("RFQ:", rfq_id)
+#         print("Vendor:", sender_email)
+
+#         save_quote(rfq_id, sender_email, body)
+
+#     print("Mailbox scan complete")
+
 import base64
 import re
-import sqlite3
-from googleapiclient.discovery import build
-from google.oauth2.credentials import Credentials
-from google_auth_oauthlib.flow import InstalledAppFlow
-from google.auth.transport.requests import Request
 import os
 import pickle
-from services.openai_service import extract_vendor_quote
+
+from googleapiclient.discovery import build
+from google_auth_oauthlib.flow import InstalledAppFlow
+from google.auth.transport.requests import Request
+
+from services.db import get_connection
+from services.ai_extractor import extract_vendor_quote
+from services.pdf_reader import extract_pdf_text
+
 
 SCOPES = ['https://www.googleapis.com/auth/gmail.modify']
 
 
-# ==============================
+# =====================================
 # GMAIL CONNECTION
-# ==============================
+# =====================================
+
 def get_gmail_service():
 
     creds = None
@@ -110,8 +957,10 @@ def get_gmail_service():
             creds = pickle.load(token)
 
     if not creds or not creds.valid:
+
         if creds and creds.expired and creds.refresh_token:
             creds.refresh(Request())
+
         else:
             flow = InstalledAppFlow.from_client_secrets_file(
                 "credentials.json",
@@ -122,120 +971,264 @@ def get_gmail_service():
         with open("token.pickle", "wb") as token:
             pickle.dump(creds, token)
 
-    return build("gmail", "v1", credentials=creds)
+    service = build("gmail", "v1", credentials=creds)
+
+    return service
 
 
-# ==============================
-# SIMPLE TEXT EXTRACTOR
-# ==============================
-def extract_details_from_text(text):
+# =====================================
+# SAVE VENDOR QUOTE
+# =====================================
 
-    unit_price = None
-    delivery_days = None
-    payment_terms = None
+def save_quote(rfq_id, sender_email, body):
 
-    # Basic regex (can improve later)
-    price_match = re.search(r'(\d+\.?\d*)', text)
-    if price_match:
-        unit_price = float(price_match.group(1))
-
-    delivery_match = re.search(r'(\d+)\s*days', text.lower())
-    if delivery_match:
-        delivery_days = delivery_match.group(1)
-
-    if "advance" in text.lower():
-        payment_terms = "Advance"
-    elif "credit" in text.lower():
-        payment_terms = "Credit"
-
-    return unit_price, delivery_days, payment_terms
-
-
-# ==============================
-# FETCH RFQ RELATED REPLIES
-# ==============================
-def fetch_rfq_replies():
-
-    service = get_gmail_service()
-
-    # Search only RFQ related threads
-    results = service.users().messages().list(
-        userId="me",
-        q="subject:RFQ"
-    ).execute()
-
-    messages = results.get("messages", [])
-
-    conn = sqlite3.connect("procurement.db")
+    conn = get_connection()
     cursor = conn.cursor()
 
-    for msg in messages:
+    cursor.execute("""
+        SELECT status FROM vendor_quotes
+        WHERE rfq_id=? AND vendor_email=?
+    """, (rfq_id, sender_email))
 
-        msg_data = service.users().messages().get(
-            userId="me",
-            id=msg["id"],
-            format="full"
-        ).execute()
+    row = cursor.fetchone()
 
-        headers = msg_data["payload"]["headers"]
+    if not row:
+        print("Vendor not found in RFQ list")
+        conn.close()
+        return
 
-        subject = ""
-        sender = ""
-        thread_id = msg_data["threadId"]
+    if row["status"] == "Quote Received":
+        print("Quote already processed")
+        conn.close()
+        return
 
-        for header in headers:
-            if header["name"] == "Subject":
-                subject = header["value"]
-            if header["name"] == "From":
-                sender = header["value"]
+    print("EMAIL BODY:")
+    print(body)
+    print("----------------------")
 
-        # Get email body
-        parts = msg_data["payload"].get("parts", [])
-        body = ""
+    # ======================
+    # AI EXTRACTION
+    # ======================
 
-        if parts:
-            for part in parts:
-                if part["mimeType"] == "text/plain":
-                    body = base64.urlsafe_b64decode(
-                        part["body"]["data"]
-                    ).decode("utf-8")
-        else:
-            body = base64.urlsafe_b64decode(
-                msg_data["payload"]["body"]["data"]
-            ).decode("utf-8")
+    ai_data = extract_vendor_quote(body)
 
-        # Extract info
-        unit_price, delivery_days, payment_terms = extract_details_from_text(body)
+    unit_price = ai_data.get("unit_price")
+    delivery_days = ai_data.get("delivery_days")
+    payment_terms = ai_data.get("payment_terms")
 
-        
-        # Extract structured data using GPT
-        extracted = extract_vendor_quote(body)
+    print("AI Extracted:", ai_data)
 
-        unit_price = extracted.get("unit_price")
-        delivery_days = extracted.get("delivery_days")
-        payment_terms = extracted.get("payment_terms")
-        # Update rfq_vendors table
-        cursor.execute("""
-            UPDATE rfq_vendors
-            SET status = ?,
-                thread_id = ?,
-                reply_date = datetime('now'),
-                extracted_unit_price = ?,
-                extracted_delivery_days = ?,
-                extracted_payment_terms = ?,
-                raw_reply = ?
-            WHERE vendor_email = ?
-        """, (
-            "Replied",
-            thread_id,
-            unit_price,
-            delivery_days,
-            payment_terms,
-            email_body,
-            vendor_email
-        ))
+    # ======================
+    # FALLBACK REGEX (if AI fails)
+    # ======================
+
+    if not unit_price:
+        price_match = re.search(r'(\d{3,6})', body)
+        if price_match:
+            unit_price = float(price_match.group(1))
+
+    if not delivery_days:
+        delivery_match = re.search(r'(\d+\s*(days|weeks))', body, re.IGNORECASE)
+        if delivery_match:
+            delivery_days = delivery_match.group(1)
+
+    if not payment_terms:
+        payment_match = re.search(r'(\d+\s*days\s*credit)', body, re.IGNORECASE)
+        if payment_match:
+            payment_terms = payment_match.group(1)
+
+    print("Final Extracted:",
+          unit_price,
+          delivery_days,
+          payment_terms)
+
+    # ======================
+    # SAVE TO DATABASE
+    # ======================
+
+    cursor.execute("""
+        UPDATE vendor_quotes
+        SET
+            unit_price = ?,
+            delivery_time = ?,
+            payment_terms = ?,
+            raw_email = ?,
+            email_received_date = datetime('now'),
+            status = 'Quote Received'
+        WHERE rfq_id = ? AND vendor_email = ?
+    """, (
+        unit_price,
+        delivery_days,
+        payment_terms,
+        body,
+        rfq_id,
+        sender_email
+    ))
 
     conn.commit()
     conn.close()
 
-    print("RFQ replies synced successfully.")
+    print("Quote stored successfully")
+
+
+# =====================================
+# EMAIL BODY EXTRACTOR
+# =====================================
+
+def get_email_body(payload):
+
+    body = ""
+
+    if 'parts' in payload:
+
+        for part in payload['parts']:
+
+            mime = part.get("mimeType")
+
+            if mime == "text/plain":
+
+                data = part['body'].get('data')
+
+                if data:
+                    decoded = base64.urlsafe_b64decode(data)
+                    body = decoded.decode(errors="ignore")
+                    return body
+
+            if 'parts' in part:
+
+                for subpart in part['parts']:
+
+                    if subpart.get("mimeType") == "text/plain":
+
+                        data = subpart['body'].get('data')
+
+                        if data:
+                            decoded = base64.urlsafe_b64decode(data)
+                            body = decoded.decode(errors="ignore")
+                            return body
+
+    else:
+
+        data = payload['body'].get('data')
+
+        if data:
+            decoded = base64.urlsafe_b64decode(data)
+            body = decoded.decode(errors="ignore")
+
+    return body
+
+
+# =====================================
+# FETCH RFQ EMAIL REPLIES
+# =====================================
+
+def fetch_rfq_replies():
+
+    print("Checking mailbox for RFQ replies...")
+
+    service = get_gmail_service()
+
+    results = service.users().messages().list(
+        userId='me',
+        labelIds=['INBOX'],
+        q="subject:RFQ is:unread"
+    ).execute()
+
+    messages = results.get('messages', [])
+
+    print("Messages found:", len(messages))
+
+    for message in messages:
+
+        msg = service.users().messages().get(
+            userId='me',
+            id=message['id']
+        ).execute()
+
+        payload = msg['payload']
+        headers = payload.get("headers")
+
+        subject = ""
+        sender = ""
+
+        for header in headers:
+
+            if header['name'] == 'Subject':
+                subject = header['value']
+
+            if header['name'] == 'From':
+                sender = header['value']
+
+        # ======================
+        # RFQ ID EXTRACT
+        # ======================
+
+        rfq_match = re.search(r"RFQ[- ]?(\d+)", subject, re.IGNORECASE)
+
+        if not rfq_match:
+            continue
+
+        rfq_id = int(rfq_match.group(1))
+
+        # ======================
+        # EXTRACT SENDER EMAIL
+        # ======================
+
+        sender_email = re.findall(r'<(.+?)>', sender)
+
+        if sender_email:
+            sender_email = sender_email[0]
+        else:
+            sender_email = sender
+
+        # ======================
+        # EMAIL BODY
+        # ======================
+
+        body = get_email_body(payload)
+
+        full_text = body
+
+        # ======================
+        # PDF ATTACHMENT READER
+        # ======================
+
+        if 'parts' in payload:
+
+            for part in payload['parts']:
+
+                filename = part.get("filename")
+
+                if filename and filename.lower().endswith(".pdf"):
+
+                    attachment_id = part['body'].get('attachmentId')
+
+                    if attachment_id:
+
+                        attachment = service.users().messages().attachments().get(
+                            userId='me',
+                            messageId=message['id'],
+                            id=attachment_id
+                        ).execute()
+
+                        data = attachment['data']
+                        file_data = base64.urlsafe_b64decode(data)
+
+                        os.makedirs("attachments", exist_ok=True)
+
+                        filepath = os.path.join("attachments", filename)
+
+                        with open(filepath, "wb") as f:
+                            f.write(file_data)
+
+                        pdf_text = extract_pdf_text(filepath)
+
+                        full_text = full_text + "\n\nPDF CONTENT:\n" + pdf_text
+
+        print("\nVendor Reply Found")
+        print("RFQ:", rfq_id)
+        print("Vendor:", sender_email)
+
+        save_quote(rfq_id, sender_email, full_text)
+
+    print("Mailbox scan complete")
