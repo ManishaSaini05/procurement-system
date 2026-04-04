@@ -1068,7 +1068,7 @@ def rfq_tracking_section():
         ORDER BY rm.rfq_id DESC
         """, (selected_project_id,))
 
-    #rows = cursor.fetchall()
+    rows = cursor.fetchall()
     conn.close()
 
     if not rows:
@@ -1086,8 +1086,8 @@ def rfq_tracking_section():
     # ]
 
     # st.dataframe(df, use_container_width=True)
-    rows = cursor.fetchall()
-    df = pd.DataFrame(rows)
+    #rows = cursor.fetchall()
+    #df = pd.DataFrame(rows)
 
     st.dataframe(df, use_container_width=True)
 

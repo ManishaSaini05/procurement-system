@@ -1194,13 +1194,41 @@ def fetch_rfq_replies():
 
         #     if header['name'] == 'From':
         #         sender = header['value']
-    for num in email_ids:
+    # for num in email_ids:
 
-        status, msg_data = mail.fetch(num, "(RFC822)")
-        msg = email.message_from_bytes(msg_data[0][1])
+    #     status, msg_data = mail.fetch(num, "(RFC822)")
+    #     msg = email.message_from_bytes(msg_data[0][1])
 
-        subject = msg["subject"]
-        sender = msg["from"]
+    #     subject = msg["subject"]
+    #     sender = msg["from"]
+    results = service.users().messages().list(
+        userId='me',
+        labelIds=['INBOX'],
+        q="subject:RFQ is:unread"
+    ).execute()
+
+    messages = results.get('messages', [])
+
+    for message in messages:
+
+        msg = service.users().messages().get(
+            userId='me',
+            id=message['id']
+        ).execute()
+
+        payload = msg['payload']
+        headers = payload.get("headers", [])
+
+        subject = ""
+        sender = ""
+
+        for header in headers:
+            if header['name'] == 'Subject':
+                subject = header['value']
+            if header['name'] == 'From':
+                sender = header['value']
+
+        body = get_email_body(payload)
         # ======================
         # RFQ ID EXTRACT
         # ======================
