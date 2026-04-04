@@ -999,8 +999,8 @@ def rfq_tracking_section():
                 fetch_rfq_replies()
             st.success("Vendor replies processed successfully")
         except Exception as e:
-            st.warning("⚠️ Email fetching not configured in cloud environment")
-            st.info("Use local system to fetch vendor replies")
+            st.error("REAL ERROR:")
+            st.write(e)
     conn = get_connection()
     cursor = conn.cursor()
 
