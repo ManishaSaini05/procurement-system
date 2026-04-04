@@ -918,7 +918,7 @@ def material_section():
         # cursor = conn.cursor()
         conn, cursor = get_cursor()
 
-        rfq_token = str(uuid.uuid4())[:8]
+        # rfq_token = str(uuid.uuid4())[:8]
 
         # cursor.execute(
         #     """
@@ -937,16 +937,13 @@ def material_section():
         cursor.execute(
            """
             INSERT INTO rfq_master
-            (project_id, material_name, quantity, uom, specification, rfq_date, status)
-            VALUES (%s, %s, %s, %s, %s, CURRENT_TIMESTAMP, %s)
+            (project_id, material_name, rfq_date, status)
+            VALUES (%s, %s, CURRENT_TIMESTAMP, %s)
             RETURNING rfq_id
             """,
             (
                 st.session_state.active_project_id,
                 selected_material,
-                quantity,
-                uom,
-                specification,
                 "sent"
             )
         )
