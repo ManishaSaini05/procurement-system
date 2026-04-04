@@ -1000,7 +1000,7 @@ def save_quote(rfq_id, sender_email, body):
 
     cursor.execute("""
         SELECT status FROM vendor_quotes
-        WHERE rfq_id=? AND vendor_email=?
+        WHERE rfq_id=%s AND vendor_email=%s
     """, (rfq_id, sender_email))
 
     row = cursor.fetchone()
@@ -1080,13 +1080,13 @@ def save_quote(rfq_id, sender_email, body):
     cursor.execute("""
         UPDATE vendor_quotes
         SET
-            unit_price = ?,
-            delivery_time = ?,
-            payment_terms = ?,
-            raw_email = ?,
-            email_received_date = datetime('now'),
+            unit_price = %s,
+            delivery_time = %s,
+            payment_terms = %s,
+            raw_email = %s,
+            email_received_date = CURRENT_TIMESTAMP,
             status = 'Quote Received'
-        WHERE rfq_id = ? AND vendor_email = ?
+        WHERE rfq_id = %s AND vendor_email = %s
     """, (
         unit_price,
         delivery_days,
