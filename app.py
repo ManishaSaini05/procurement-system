@@ -1040,7 +1040,7 @@ def rfq_tracking_section():
 
     selected_project_id = project_dict[selected_project]
 
-    cursor.execute(
+    #cursor.execute(
          #"""
     #     SELECT
     #         rm.rfq_id,
@@ -1054,7 +1054,8 @@ def rfq_tracking_section():
     #     ORDER BY rm.rfq_id DESC
     #     """,
     #     (selected_project_id,)
-    """
+    #)
+    cursor.execute("""
         SELECT
             rm.rfq_id AS "RFQ ID",
             rm.material_name AS "Material",
@@ -1065,10 +1066,9 @@ def rfq_tracking_section():
         LEFT JOIN vendor_quotes rv ON rm.rfq_id = rv.rfq_id
         WHERE rm.project_id = %s
         ORDER BY rm.rfq_id DESC
-    """
-    )
+        """, (selected_project_id,))
 
-    rows = cursor.fetchall()
+    #rows = cursor.fetchall()
     conn.close()
 
     if not rows:
@@ -1130,11 +1130,19 @@ def comparison_section():
     material_list = [m["material_name"] for m in materials]
     selected_material = st.selectbox("Select Material", material_list)
 
+    # cursor.execute("""
+    # SELECT rfq_id, vendor_name, unit_price, delivery_time, payment_terms
+    # FROM vendor_quotes
+    # ORDER BY rfq_id DESC
+    # """)
     cursor.execute("""
     SELECT rfq_id, vendor_name, unit_price, delivery_time, payment_terms
     FROM vendor_quotes
-    ORDER BY rfq_id DESC
-    """)
+    WHERE rfq_id IN (
+        SELECT rfq_id FROM rfq_master
+        WHERE project_id = %s AND material_name = %s
+    )
+    """, (selected_project_id, selected_material))
     
 
     rows = cursor.fetchall()
@@ -1158,13 +1166,13 @@ def comparison_section():
         use_container_width=True,
         num_rows="fixed"
     )
-    column_config={
-        "RFQ ID": st.column_config.Column(disabled=True),
-        "Vendor": st.column_config.Column(disabled=True),
-        "Unit Price": st.column_config.NumberColumn(),
-        "Delivery Time": st.column_config.TextColumn(),
-        "Payment Terms": st.column_config.TextColumn()
-    },
+        column_config={
+            "RFQ ID": st.column_config.Column(disabled=True),
+            "Vendor": st.column_config.Column(disabled=True),
+            "Unit Price": st.column_config.NumberColumn(),
+            "Delivery Time": st.column_config.TextColumn(),
+            "Payment Terms": st.column_config.TextColumn()
+        },
   
     if st.button("💾 Save Edited Quotes"):
 

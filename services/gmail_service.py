@@ -1232,13 +1232,14 @@ def fetch_rfq_replies():
         # full_text = body
         body = ""
 
-    if msg.is_multipart():
-        for part in msg.walk():
-            if part.get_content_type() == "text/plain":
-                body = part.get_payload(decode=True).decode(errors="ignore")
-                break
-    else:
-        body = msg.get_payload(decode=True).decode(errors="ignore")
+    # if msg.is_multipart():
+    #     for part in msg.walk():
+    #         if part.get_content_type() == "text/plain":
+    #             body = part.get_payload(decode=True).decode(errors="ignore")
+    #             break
+    # else:
+    #     body = msg.get_payload(decode=True).decode(errors="ignore")
+    body = get_email_body(payload)
 
         # ======================
         # PDF ATTACHMENT READER
