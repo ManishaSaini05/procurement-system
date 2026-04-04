@@ -927,56 +927,324 @@
 
 #     print("Mailbox scan complete")
 
-import base64
+# import base64
+# import re
+# import os
+# import pickle
+
+# from googleapiclient.discovery import build
+# from google_auth_oauthlib.flow import InstalledAppFlow
+# from google.auth.transport.requests import Request
+
+# from services.db import get_connection
+# from services.ai_extractor import extract_vendor_quote
+# from services.pdf_reader import extract_pdf_text
+
+
+# SCOPES = ['https://www.googleapis.com/auth/gmail.modify']
+
+
+# # =====================================
+# # GMAIL CONNECTION
+# # =====================================
+
+# def get_gmail_service():
+
+#     creds = None
+
+#     if os.path.exists("token.pickle"):
+#         with open("token.pickle", "rb") as token:
+#             creds = pickle.load(token)
+
+#     if not creds or not creds.valid:
+
+#         if creds and creds.expired and creds.refresh_token:
+#             creds.refresh(Request())
+
+#         else:
+#             flow = InstalledAppFlow.from_client_secrets_file(
+#                 "credentials.json",
+#                 SCOPES
+#             )
+#             creds = flow.run_local_server(port=0)
+
+#         with open("token.pickle", "wb") as token:
+#             pickle.dump(creds, token)
+
+#     service = build("gmail", "v1", credentials=creds)
+
+#     return service
+
+
+# # =====================================
+# # SAVE VENDOR QUOTE
+# # =====================================
+
+# def save_quote(rfq_id, sender_email, body):
+
+#     conn = get_connection()
+#     cursor = conn.cursor()
+
+#     cursor.execute("""
+#         SELECT status FROM vendor_quotes
+#         WHERE rfq_id=? AND vendor_email=?
+#     """, (rfq_id, sender_email))
+
+#     row = cursor.fetchone()
+
+#     if not row:
+#         print("Vendor not found in RFQ list")
+#         conn.close()
+#         return
+
+#     if row["status"] == "Quote Received":
+#         print("Quote already processed")
+#         conn.close()
+#         return
+
+#     print("EMAIL BODY:")
+#     print(body)
+#     print("----------------------")
+
+#     # ======================
+#     # AI EXTRACTION
+#     # ======================
+
+#     ai_data = extract_vendor_quote(body)
+
+#     unit_price = ai_data.get("unit_price")
+#     delivery_days = ai_data.get("delivery_days")
+#     payment_terms = ai_data.get("payment_terms")
+
+#     print("AI Extracted:", ai_data)
+
+#     # ======================
+#     # FALLBACK REGEX (if AI fails)
+#     # ======================
+
+#     if not unit_price:
+#         price_match = re.search(r'(\d{3,6})', body)
+#         if price_match:
+#             unit_price = float(price_match.group(1))
+
+#     if not delivery_days:
+#         delivery_match = re.search(r'(\d+\s*(days|weeks))', body, re.IGNORECASE)
+#         if delivery_match:
+#             delivery_days = delivery_match.group(1)
+
+#     if not payment_terms:
+#         payment_match = re.search(r'(\d+\s*days\s*credit)', body, re.IGNORECASE)
+#         if payment_match:
+#             payment_terms = payment_match.group(1)
+
+#     print("Final Extracted:",
+#           unit_price,
+#           delivery_days,
+#           payment_terms)
+
+#     # ======================
+#     # SAVE TO DATABASE
+#     # ======================
+
+#     cursor.execute("""
+#         UPDATE vendor_quotes
+#         SET
+#             unit_price = ?,
+#             delivery_time = ?,
+#             payment_terms = ?,
+#             raw_email = ?,
+#             email_received_date = datetime('now'),
+#             status = 'Quote Received'
+#         WHERE rfq_id = ? AND vendor_email = ?
+#     """, (
+#         unit_price,
+#         delivery_days,
+#         payment_terms,
+#         body,
+#         rfq_id,
+#         sender_email
+#     ))
+
+#     conn.commit()
+#     conn.close()
+
+#     print("Quote stored successfully")
+
+
+# # =====================================
+# # EMAIL BODY EXTRACTOR
+# # =====================================
+
+# def get_email_body(payload):
+
+#     body = ""
+
+#     if 'parts' in payload:
+
+#         for part in payload['parts']:
+
+#             mime = part.get("mimeType")
+
+#             if mime == "text/plain":
+
+#                 data = part['body'].get('data')
+
+#                 if data:
+#                     decoded = base64.urlsafe_b64decode(data)
+#                     body = decoded.decode(errors="ignore")
+#                     return body
+
+#             if 'parts' in part:
+
+#                 for subpart in part['parts']:
+
+#                     if subpart.get("mimeType") == "text/plain":
+
+#                         data = subpart['body'].get('data')
+
+#                         if data:
+#                             decoded = base64.urlsafe_b64decode(data)
+#                             body = decoded.decode(errors="ignore")
+#                             return body
+
+#     else:
+
+#         data = payload['body'].get('data')
+
+#         if data:
+#             decoded = base64.urlsafe_b64decode(data)
+#             body = decoded.decode(errors="ignore")
+
+#     return body
+
+
+# # =====================================
+# # FETCH RFQ EMAIL REPLIES
+# # =====================================
+
+# def fetch_rfq_replies():
+
+#     print("Checking mailbox for RFQ replies...")
+
+#     service = get_gmail_service()
+
+#     results = service.users().messages().list(
+#         userId='me',
+#         labelIds=['INBOX'],
+#         q="subject:RFQ is:unread"
+#     ).execute()
+
+#     messages = results.get('messages', [])
+
+#     print("Messages found:", len(messages))
+
+#     for message in messages:
+
+#         msg = service.users().messages().get(
+#             userId='me',
+#             id=message['id']
+#         ).execute()
+
+#         payload = msg['payload']
+#         headers = payload.get("headers")
+
+#         subject = ""
+#         sender = ""
+
+#         for header in headers:
+
+#             if header['name'] == 'Subject':
+#                 subject = header['value']
+
+#             if header['name'] == 'From':
+#                 sender = header['value']
+
+#         # ======================
+#         # RFQ ID EXTRACT
+#         # ======================
+
+#         rfq_match = re.search(r"RFQ[- ]?(\d+)", subject, re.IGNORECASE)
+
+#         if not rfq_match:
+#             continue
+
+#         rfq_id = int(rfq_match.group(1))
+
+#         # ======================
+#         # EXTRACT SENDER EMAIL
+#         # ======================
+
+#         sender_email = re.findall(r'<(.+?)>', sender)
+
+#         if sender_email:
+#             sender_email = sender_email[0]
+#         else:
+#             sender_email = sender
+
+#         # ======================
+#         # EMAIL BODY
+#         # ======================
+
+#         body = get_email_body(payload)
+
+#         full_text = body
+
+#         # ======================
+#         # PDF ATTACHMENT READER
+#         # ======================
+
+#         if 'parts' in payload:
+
+#             for part in payload['parts']:
+
+#                 filename = part.get("filename")
+
+#                 if filename and filename.lower().endswith(".pdf"):
+
+#                     attachment_id = part['body'].get('attachmentId')
+
+#                     if attachment_id:
+
+#                         attachment = service.users().messages().attachments().get(
+#                             userId='me',
+#                             messageId=message['id'],
+#                             id=attachment_id
+#                         ).execute()
+
+#                         data = attachment['data']
+#                         file_data = base64.urlsafe_b64decode(data)
+
+#                         os.makedirs("attachments", exist_ok=True)
+
+#                         filepath = os.path.join("attachments", filename)
+
+#                         with open(filepath, "wb") as f:
+#                             f.write(file_data)
+
+#                         pdf_text = extract_pdf_text(filepath)
+
+#                         full_text = full_text + "\n\nPDF CONTENT:\n" + pdf_text
+
+#         print("\nVendor Reply Found")
+#         print("RFQ:", rfq_id)
+#         print("Vendor:", sender_email)
+
+#         save_quote(rfq_id, sender_email, full_text)
+
+#     print("Mailbox scan complete")
+
 import re
-import os
-import pickle
-
-from googleapiclient.discovery import build
-from google_auth_oauthlib.flow import InstalledAppFlow
-from google.auth.transport.requests import Request
-
-from services.db import get_connection
-from services.ai_extractor import extract_vendor_quote
-from services.pdf_reader import extract_pdf_text
-
-
-SCOPES = ['https://www.googleapis.com/auth/gmail.modify']
-
-
-# =====================================
-# GMAIL CONNECTION
-# =====================================
-
-#def get_gmail_service():
-
-    #creds = None
-
-    #if os.path.exists("token.pickle"):
-        #with open("token.pickle", "rb") as token:
-            #creds = pickle.load(token)
-
-    #if not creds or not creds.valid:
-
-        #if creds and creds.expired and creds.refresh_token:
-            #creds.refresh(Request())
-
-        #else:
-            #flow = InstalledAppFlow.from_client_secrets_file(
-                #"credentials.json",
-                #SCOPES
-            #)
-            #creds = flow.run_local_server(port=0)
-
-        #with open("token.pickle", "wb") as token:
-            #pickle.dump(creds, token)
-
-    #service = build("gmail", "v1", credentials=creds)
-
-    #return service
 import imaplib
 import email
 import streamlit as st
+
+from services.db import get_connection
+from services.ai_extractor import extract_vendor_quote
+
+
+# =====================================
+# GMAIL CONNECTION (IMAP)
+# =====================================
 
 def get_gmail_connection():
 
@@ -1015,14 +1283,13 @@ def save_quote(rfq_id, sender_email, body):
         conn.close()
         return
 
-    print("EMAIL BODY:")
+    print("\nEMAIL BODY:")
     print(body)
     print("----------------------")
 
     # ======================
     # AI EXTRACTION
     # ======================
-
     ai_data = extract_vendor_quote(body)
 
     unit_price = ai_data.get("unit_price")
@@ -1032,32 +1299,8 @@ def save_quote(rfq_id, sender_email, body):
     print("AI Extracted:", ai_data)
 
     # ======================
-    # FALLBACK REGEX (if AI fails)
+    # FALLBACK REGEX
     # ======================
-
-    # if not unit_price:
-    #     price_match = re.search(r'(\d{3,6})', body)
-    #     if price_match:
-    #         unit_price = float(price_match.group(1))
-
-    # if not delivery_days:
-    #     delivery_match = re.search(r'(\d+\s*(days|weeks))', body, re.IGNORECASE)
-    #     if delivery_match:
-    #         delivery_days = delivery_match.group(1)
-
-    # if not payment_terms:
-    #     payment_match = re.search(r'(\d+\s*days\s*credit)', body, re.IGNORECASE)
-    #     if payment_match:
-    #         payment_terms = payment_match.group(1)
-
-    # print("Final Extracted:",
-    #       unit_price,
-    #       delivery_days,
-    #       payment_terms)
-    # ======================
-# STRONG FALLBACK REGEX
-# ======================
-
     if not unit_price:
         price_match = re.search(r'(?:Rs\.?|INR)?\s?(\d{3,7})', body, re.IGNORECASE)
         if price_match:
@@ -1073,10 +1316,11 @@ def save_quote(rfq_id, sender_email, body):
         if payment_match:
             payment_terms = payment_match.group(1)
 
+    print("Final Extracted:", unit_price, delivery_days, payment_terms)
+
     # ======================
     # SAVE TO DATABASE
     # ======================
-
     cursor.execute("""
         UPDATE vendor_quotes
         SET
@@ -1099,216 +1343,71 @@ def save_quote(rfq_id, sender_email, body):
     conn.commit()
     conn.close()
 
-    print("Quote stored successfully")
+    print("✅ Quote stored successfully")
 
 
 # =====================================
-# EMAIL BODY EXTRACTOR
-# =====================================
-
-def get_email_body(payload):
-
-    body = ""
-
-    if 'parts' in payload:
-
-        for part in payload['parts']:
-
-            mime = part.get("mimeType")
-
-            if mime == "text/plain":
-
-                data = part['body'].get('data')
-
-                if data:
-                    decoded = base64.urlsafe_b64decode(data)
-                    body = decoded.decode(errors="ignore")
-                    return body
-
-            if 'parts' in part:
-
-                for subpart in part['parts']:
-
-                    if subpart.get("mimeType") == "text/plain":
-
-                        data = subpart['body'].get('data')
-
-                        if data:
-                            decoded = base64.urlsafe_b64decode(data)
-                            body = decoded.decode(errors="ignore")
-                            return body
-
-    else:
-
-        data = payload['body'].get('data')
-
-        if data:
-            decoded = base64.urlsafe_b64decode(data)
-            body = decoded.decode(errors="ignore")
-
-    return body
-
-
-# =====================================
-# FETCH RFQ EMAIL REPLIES
+# FETCH RFQ EMAIL REPLIES (IMAP)
 # =====================================
 
 def fetch_rfq_replies():
 
     print("Checking mailbox for RFQ replies...")
 
-    service = get_gmail_service()
-    #mail = get_gmail_connection()
-    mail.select("inbox")
+    try:
+        mail = get_gmail_connection()
+        mail.select("inbox")
 
-    status, messages = mail.search(None, '(UNSEEN SUBJECT "RFQ")')
-    email_ids = messages[0].split()
+        status, messages = mail.search(None, '(UNSEEN SUBJECT "RFQ")')
+        email_ids = messages[0].split()
 
-    #results = service.users().messages().list(
-        #userId='me',
-        #labelIds=['INBOX'],
-    #     q="subject:RFQ is:unread"
-    # ).execute()
+        print("Emails found:", len(email_ids))
 
-    # messages = results.get('messages', [])
+        for num in email_ids:
 
-    # print("Messages found:", len(messages))
+            status, msg_data = mail.fetch(num, "(RFC822)")
+            msg = email.message_from_bytes(msg_data[0][1])
 
-    # for message in messages:
+            subject = msg["subject"]
+            sender = msg["from"]
 
-    #     msg = service.users().messages().get(
-    #         userId='me',
-    #         id=message['id']
-    #     ).execute()
+            # ======================
+            # RFQ ID EXTRACT
+            # ======================
+            rfq_match = re.search(r"RFQ[- ]?(\d+)", subject, re.IGNORECASE)
 
-    #     payload = msg['payload']
-    #     headers = payload.get("headers")
+            if not rfq_match:
+                continue
 
-    #     subject = ""
-    #     sender = ""
+            rfq_id = int(rfq_match.group(1))
 
-        # for header in headers:
+            # ======================
+            # EXTRACT EMAIL
+            # ======================
+            sender_email = re.findall(r'<(.+?)>', sender)
+            sender_email = sender_email[0] if sender_email else sender
 
-        #     if header['name'] == 'Subject':
-        #         subject = header['value']
+            # ======================
+            # EXTRACT BODY
+            # ======================
+            body = ""
 
-        #     if header['name'] == 'From':
-        #         sender = header['value']
-    # for num in email_ids:
+            if msg.is_multipart():
+                for part in msg.walk():
+                    if part.get_content_type() == "text/plain":
+                        body = part.get_payload(decode=True).decode(errors="ignore")
+                        break
+            else:
+                body = msg.get_payload(decode=True).decode(errors="ignore")
 
-    #     status, msg_data = mail.fetch(num, "(RFC822)")
-    #     msg = email.message_from_bytes(msg_data[0][1])
+            print("\n📩 Vendor Reply Found")
+            print("RFQ:", rfq_id)
+            print("Vendor:", sender_email)
 
-    #     subject = msg["subject"]
-    #     sender = msg["from"]
-    results = service.users().messages().list(
-        userId='me',
-        labelIds=['INBOX'],
-        q="subject:RFQ is:unread"
-    ).execute()
+            save_quote(rfq_id, sender_email, body)
 
-    messages = results.get('messages', [])
+        print("✅ Mailbox scan complete")
 
-    for message in messages:
-
-        msg = service.users().messages().get(
-            userId='me',
-            id=message['id']
-        ).execute()
-
-        payload = msg['payload']
-        headers = payload.get("headers", [])
-
-        subject = ""
-        sender = ""
-
-        for header in headers:
-            if header['name'] == 'Subject':
-                subject = header['value']
-            if header['name'] == 'From':
-                sender = header['value']
-
-        body = get_email_body(payload)
-        # ======================
-        # RFQ ID EXTRACT
-        # ======================
-
-        rfq_match = re.search(r"RFQ[- ]?(\d+)", subject, re.IGNORECASE)
-
-        if not rfq_match:
-            continue
-
-        rfq_id = int(rfq_match.group(1))
-
-        # ======================
-        # EXTRACT SENDER EMAIL
-        # ======================
-
-        sender_email = re.findall(r'<(.+?)>', sender)
-
-        if sender_email:
-            sender_email = sender_email[0]
-        else:
-            sender_email = sender
-
-        # ======================
-        # EMAIL BODY
-        # ======================
-
-        # body = get_email_body(payload)
-
-        # full_text = body
-        body = ""
-
-    # if msg.is_multipart():
-    #     for part in msg.walk():
-    #         if part.get_content_type() == "text/plain":
-    #             body = part.get_payload(decode=True).decode(errors="ignore")
-    #             break
-    # else:
-    #     body = msg.get_payload(decode=True).decode(errors="ignore")
-    body = get_email_body(payload)
-
-        # ======================
-        # PDF ATTACHMENT READER
-        # ======================
-
-        # if 'parts' in payload:
-
-        #     for part in payload['parts']:
-
-        #         filename = part.get("filename")
-
-        #         if filename and filename.lower().endswith(".pdf"):
-
-        #             attachment_id = part['body'].get('attachmentId')
-
-        #             if attachment_id:
-
-        #                 attachment = service.users().messages().attachments().get(
-        #                     userId='me',
-        #                     messageId=message['id'],
-        #                     id=attachment_id
-        #                 ).execute()
-
-        #                 data = attachment['data']
-        #                 file_data = base64.urlsafe_b64decode(data)
-
-        #                 os.makedirs("attachments", exist_ok=True)
-
-        #                 filepath = os.path.join("attachments", filename)
-
-        #                 with open(filepath, "wb") as f:
-        #                     f.write(file_data)
-
-        #                 pdf_text = extract_pdf_text(filepath)
-
-        #                 full_text = full_text + "\n\nPDF CONTENT:\n" + pdf_text
-
-    print("\nVendor Reply Found")
-    print("RFQ:", rfq_id)
-    print("Vendor:", sender_email)
-
-    save_quote(rfq_id, sender_email, full_text)
-
-    print("Mailbox scan complete")
+    except Exception as e:
+        print("❌ ERROR:", str(e))
+        raise e
