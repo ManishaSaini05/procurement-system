@@ -1305,10 +1305,10 @@ def fetch_rfq_replies():
 
         #                 full_text = full_text + "\n\nPDF CONTENT:\n" + pdf_text
 
-        print("\nVendor Reply Found")
-        print("RFQ:", rfq_id)
-        print("Vendor:", sender_email)
+    print("\nVendor Reply Found")
+    print("RFQ:", rfq_id)
+    print("Vendor:", sender_email)
 
-        save_quote(rfq_id, sender_email, full_text)
+    save_quote(rfq_id, sender_email, full_text)
 
     print("Mailbox scan complete")
