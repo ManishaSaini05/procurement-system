@@ -733,9 +733,9 @@ def login_page():
 
     if st.button("Login"):
 
-        conn = get_connection()
-        cursor = conn.cursor()
-
+        # conn = get_connection()
+        # cursor = conn.cursor()
+        conn, cursor = get_cursor()
         cursor.execute(
             "SELECT * FROM users WHERE username=? AND password=?",
             (username, password)
@@ -780,8 +780,9 @@ def project_section():
     st.session_state["selected_project_code"] = selected_project_code
     if selected_project_code:
 
-        conn = get_connection()
-        cursor = conn.cursor()
+        # conn = get_connection()
+        # cursor = conn.cursor()
+        conn, cursor = get_cursor()
 
         cursor.execute(
             "SELECT * FROM projects WHERE project_id=?",
@@ -912,8 +913,9 @@ def material_section():
             st.warning("Select at least one vendor.")
             return
 
-        conn = get_connection()
-        cursor = conn.cursor()
+        # conn = get_connection()
+        # cursor = conn.cursor()
+        conn, cursor = get_cursor()
 
         rfq_token = str(uuid.uuid4())[:8]
 
@@ -1001,8 +1003,9 @@ def rfq_tracking_section():
         except Exception as e:
             st.error("REAL ERROR:")
             st.write(e)
-    conn = get_connection()
-    cursor = conn.cursor()
+    # conn = get_connection()
+    # cursor = conn.cursor()
+    conn, cursor = get_cursor()
 
     cursor.execute("SELECT id, project_id FROM projects")
     projects = cursor.fetchall()
@@ -1060,8 +1063,9 @@ def comparison_section():
 
     st.title("📊 Vendor Quote Comparison")
 
-    conn = get_connection()
-    cursor = conn.cursor()
+    # conn = get_connection()
+    # cursor = conn.cursor()
+    conn, cursor = get_cursor()
 
     # =========================
     # Select Project
@@ -1132,8 +1136,9 @@ def comparison_section():
   
     if st.button("💾 Save Edited Quotes"):
 
-        conn = get_connection()
-        cursor = conn.cursor()
+        # conn = get_connection()
+        # cursor = conn.cursor()
+        conn, cursor = get_cursor()
 
         for _, row in edited_df.iterrows():
 
@@ -1178,8 +1183,9 @@ def comparison_section():
 
         vendor_row = selected_vendor.iloc[0]
 
-        conn = get_connection()
-        cursor = conn.cursor()
+        # conn = get_connection()
+        # cursor = conn.cursor()
+        conn, cursor = get_cursor()
 
         # Check if approval already exists
         cursor.execute("""
@@ -1233,8 +1239,9 @@ def manager_approval_section():
 
     st.title("🧾 Manager Vendor Approvals")
 
-    conn = get_connection()
-    cursor = conn.cursor()
+    # conn = get_connection()
+    # cursor = conn.cursor()
+    conn, cursor = get_cursor()
 
     cursor.execute("""
     SELECT id, project_id, material_name, vendor_name, unit_price, delivery_time, payment_terms
@@ -1304,8 +1311,9 @@ def costing_section():
 
     st.title("💰 Project Costing")
 
-    conn = get_connection()
-    cursor = conn.cursor()
+    # conn = get_connection()
+    # cursor = conn.cursor()
+    conn, cursor = get_cursor()
 
     # Select Project
     cursor.execute("SELECT id, project_id FROM projects")
