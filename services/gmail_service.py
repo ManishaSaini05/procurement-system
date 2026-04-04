@@ -948,32 +948,45 @@ SCOPES = ['https://www.googleapis.com/auth/gmail.modify']
 # GMAIL CONNECTION
 # =====================================
 
-def get_gmail_service():
+#def get_gmail_service():
 
-    creds = None
+    #creds = None
 
-    if os.path.exists("token.pickle"):
-        with open("token.pickle", "rb") as token:
-            creds = pickle.load(token)
+    #if os.path.exists("token.pickle"):
+        #with open("token.pickle", "rb") as token:
+            #creds = pickle.load(token)
 
-    if not creds or not creds.valid:
+    #if not creds or not creds.valid:
 
-        if creds and creds.expired and creds.refresh_token:
-            creds.refresh(Request())
+        #if creds and creds.expired and creds.refresh_token:
+            #creds.refresh(Request())
 
-        else:
-            flow = InstalledAppFlow.from_client_secrets_file(
-                "credentials.json",
-                SCOPES
-            )
-            creds = flow.run_local_server(port=0)
+        #else:
+            #flow = InstalledAppFlow.from_client_secrets_file(
+                #"credentials.json",
+                #SCOPES
+            #)
+            #creds = flow.run_local_server(port=0)
 
-        with open("token.pickle", "wb") as token:
-            pickle.dump(creds, token)
+        #with open("token.pickle", "wb") as token:
+            #pickle.dump(creds, token)
 
-    service = build("gmail", "v1", credentials=creds)
+    #service = build("gmail", "v1", credentials=creds)
 
-    return service
+    #return service
+import imaplib
+import email
+import streamlit as st
+
+def get_gmail_connection():
+
+    EMAIL = st.secrets["EMAIL"]
+    APP_PASSWORD = st.secrets["APP_PASSWORD"]
+
+    mail = imaplib.IMAP4_SSL("imap.gmail.com")
+    mail.login(EMAIL, APP_PASSWORD)
+
+    return mail
 
 
 # =====================================
@@ -1126,39 +1139,50 @@ def fetch_rfq_replies():
 
     print("Checking mailbox for RFQ replies...")
 
-    service = get_gmail_service()
+    #service = get_gmail_service()
+    mail = get_gmail_connection()
+    mail.select("inbox")
 
-    results = service.users().messages().list(
-        userId='me',
-        labelIds=['INBOX'],
-        q="subject:RFQ is:unread"
-    ).execute()
+    status, messages = mail.search(None, '(UNSEEN SUBJECT "RFQ")')
+    email_ids = messages[0].split()
 
-    messages = results.get('messages', [])
+    #results = service.users().messages().list(
+        #userId='me',
+        #labelIds=['INBOX'],
+    #     q="subject:RFQ is:unread"
+    # ).execute()
 
-    print("Messages found:", len(messages))
+    # messages = results.get('messages', [])
 
-    for message in messages:
+    # print("Messages found:", len(messages))
 
-        msg = service.users().messages().get(
-            userId='me',
-            id=message['id']
-        ).execute()
+    # for message in messages:
 
-        payload = msg['payload']
-        headers = payload.get("headers")
+    #     msg = service.users().messages().get(
+    #         userId='me',
+    #         id=message['id']
+    #     ).execute()
 
-        subject = ""
-        sender = ""
+    #     payload = msg['payload']
+    #     headers = payload.get("headers")
 
-        for header in headers:
+    #     subject = ""
+    #     sender = ""
 
-            if header['name'] == 'Subject':
-                subject = header['value']
+        # for header in headers:
 
-            if header['name'] == 'From':
-                sender = header['value']
+        #     if header['name'] == 'Subject':
+        #         subject = header['value']
 
+        #     if header['name'] == 'From':
+        #         sender = header['value']
+    for num in email_ids:
+
+        status, msg_data = mail.fetch(num, "(RFC822)")
+        msg = email.message_from_bytes(msg_data[0][1])
+
+        subject = msg["subject"]
+        sender = msg["from"]
         # ======================
         # RFQ ID EXTRACT
         # ======================
@@ -1185,45 +1209,54 @@ def fetch_rfq_replies():
         # EMAIL BODY
         # ======================
 
-        body = get_email_body(payload)
+        # body = get_email_body(payload)
 
-        full_text = body
+        # full_text = body
+        body = ""
+
+    if msg.is_multipart():
+        for part in msg.walk():
+            if part.get_content_type() == "text/plain":
+                body = part.get_payload(decode=True).decode(errors="ignore")
+                break
+    else:
+        body = msg.get_payload(decode=True).decode(errors="ignore")
 
         # ======================
         # PDF ATTACHMENT READER
         # ======================
 
-        if 'parts' in payload:
+        # if 'parts' in payload:
 
-            for part in payload['parts']:
+        #     for part in payload['parts']:
 
-                filename = part.get("filename")
+        #         filename = part.get("filename")
 
-                if filename and filename.lower().endswith(".pdf"):
+        #         if filename and filename.lower().endswith(".pdf"):
 
-                    attachment_id = part['body'].get('attachmentId')
+        #             attachment_id = part['body'].get('attachmentId')
 
-                    if attachment_id:
+        #             if attachment_id:
 
-                        attachment = service.users().messages().attachments().get(
-                            userId='me',
-                            messageId=message['id'],
-                            id=attachment_id
-                        ).execute()
+        #                 attachment = service.users().messages().attachments().get(
+        #                     userId='me',
+        #                     messageId=message['id'],
+        #                     id=attachment_id
+        #                 ).execute()
 
-                        data = attachment['data']
-                        file_data = base64.urlsafe_b64decode(data)
+        #                 data = attachment['data']
+        #                 file_data = base64.urlsafe_b64decode(data)
 
-                        os.makedirs("attachments", exist_ok=True)
+        #                 os.makedirs("attachments", exist_ok=True)
 
-                        filepath = os.path.join("attachments", filename)
+        #                 filepath = os.path.join("attachments", filename)
 
-                        with open(filepath, "wb") as f:
-                            f.write(file_data)
+        #                 with open(filepath, "wb") as f:
+        #                     f.write(file_data)
 
-                        pdf_text = extract_pdf_text(filepath)
+        #                 pdf_text = extract_pdf_text(filepath)
 
-                        full_text = full_text + "\n\nPDF CONTENT:\n" + pdf_text
+        #                 full_text = full_text + "\n\nPDF CONTENT:\n" + pdf_text
 
         print("\nVendor Reply Found")
         print("RFQ:", rfq_id)
