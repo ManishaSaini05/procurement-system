@@ -1054,18 +1054,18 @@ def rfq_tracking_section():
     #     ORDER BY rm.rfq_id DESC
     #     """,
     #     (selected_project_id,)
-        """"
+    """
         SELECT
-        rm.rfq_id AS "RFQ ID",
-        rm.material_name AS "Material",
-        rm.status AS "RFQ Status",
-        rv.vendor_name AS "Vendor",
-        rv.status AS "Vendor Status"
-    FROM rfq_master rm
-    LEFT JOIN vendor_quotes rv ON rm.rfq_id = rv.rfq_id
-    WHERE rm.project_id = %s
-    ORDER BY rm.rfq_id DESC
-    """"
+            rm.rfq_id AS "RFQ ID",
+            rm.material_name AS "Material",
+            rm.status AS "RFQ Status",
+            rv.vendor_name AS "Vendor",
+            rv.status AS "Vendor Status"
+        FROM rfq_master rm
+        LEFT JOIN vendor_quotes rv ON rm.rfq_id = rv.rfq_id
+        WHERE rm.project_id = %s
+        ORDER BY rm.rfq_id DESC
+    """
     )
 
     rows = cursor.fetchall()
