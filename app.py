@@ -920,20 +920,38 @@ def material_section():
 
         rfq_token = str(uuid.uuid4())[:8]
 
+        # cursor.execute(
+        #     """
+        #     INSERT INTO rfq_master
+        #     (project_id, material_name, rfq_date, status)
+        #     VALUES (%s, %s, CURRENT_TIMESTAMP, %s)
+        #     """,
+        #     (
+        #         st.session_state.active_project_id,
+        #         selected_material,
+        #         "sent"
+        #     )
+        # )
+
+        # rfq_id = cursor.lastrowid
         cursor.execute(
-            """
+           """
             INSERT INTO rfq_master
-            (project_id, material_name, rfq_date, status)
-            VALUES (%s, %s, datetime('now'), %s)
+            (project_id, material_name, quantity, uom, specification, rfq_date, status)
+            VALUES (%s, %s, %s, %s, %s, CURRENT_TIMESTAMP, %s)
+            RETURNING rfq_id
             """,
             (
                 st.session_state.active_project_id,
                 selected_material,
+                quantity,
+                uom,
+                specification,
                 "sent"
             )
         )
 
-        rfq_id = cursor.lastrowid
+        rfq_id = cursor.fetchone()["rfq_id"]
 
         # SEND EMAILS
 
