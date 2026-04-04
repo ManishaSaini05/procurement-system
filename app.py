@@ -987,12 +987,20 @@ def rfq_tracking_section():
     st.title("📊 RFQ Tracking")
 
     # Fetch vendor replies button
+    #if st.button("📩 Fetch Vendor Replies"):
+        #with st.spinner("Reading vendor emails..."):
+            #from services.gmail_service import fetch_rfq_replies
+            #fetch_rfq_replies()
+        #st.success("Vendor replies processed successfully")
     if st.button("📩 Fetch Vendor Replies"):
-        with st.spinner("Reading vendor emails..."):
-            from services.gmail_service import fetch_rfq_replies
-            fetch_rfq_replies()
-        st.success("Vendor replies processed successfully")
-
+        try:
+            with st.spinner("Reading vendor emails..."):
+                from services.gmail_service import fetch_rfq_replies
+                fetch_rfq_replies()
+            st.success("Vendor replies processed successfully")
+        except Exception as e:
+            st.warning("⚠️ Email fetching not configured in cloud environment")
+            st.info("Use local system to fetch vendor replies")
     conn = get_connection()
     cursor = conn.cursor()
 
