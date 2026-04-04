@@ -1166,13 +1166,13 @@ def comparison_section():
         use_container_width=True,
         num_rows="fixed"
     )
-        column_config={
-            "RFQ ID": st.column_config.Column(disabled=True),
-            "Vendor": st.column_config.Column(disabled=True),
-            "Unit Price": st.column_config.NumberColumn(),
-            "Delivery Time": st.column_config.TextColumn(),
-            "Payment Terms": st.column_config.TextColumn()
-        },
+    column_config={
+        "RFQ ID": st.column_config.Column(disabled=True),
+        "Vendor": st.column_config.Column(disabled=True),
+        "Unit Price": st.column_config.NumberColumn(),
+        "Delivery Time": st.column_config.TextColumn(),
+        "Payment Terms": st.column_config.TextColumn()
+    },
   
     if st.button("💾 Save Edited Quotes"):
 
