@@ -1157,7 +1157,7 @@ def fetch_rfq_replies():
 
     print("Checking mailbox for RFQ replies...")
 
-    #service = get_gmail_service()
+    service = get_gmail_service()
     mail = get_gmail_connection()
     mail.select("inbox")
 
