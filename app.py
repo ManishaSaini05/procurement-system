@@ -674,7 +674,8 @@ import streamlit as st
 import pandas as pd
 import uuid
 from pathlib import Path
-from services.db import get_connection
+#from services.db import get_connection
+from services.db import get_connection, get_cursor
 from services.email_service import send_rfq_email
 from services.email_service import send_approval_email
 query_params = st.query_params
