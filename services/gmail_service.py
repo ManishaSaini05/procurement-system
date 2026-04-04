@@ -1035,8 +1035,31 @@ def save_quote(rfq_id, sender_email, body):
     # FALLBACK REGEX (if AI fails)
     # ======================
 
+    # if not unit_price:
+    #     price_match = re.search(r'(\d{3,6})', body)
+    #     if price_match:
+    #         unit_price = float(price_match.group(1))
+
+    # if not delivery_days:
+    #     delivery_match = re.search(r'(\d+\s*(days|weeks))', body, re.IGNORECASE)
+    #     if delivery_match:
+    #         delivery_days = delivery_match.group(1)
+
+    # if not payment_terms:
+    #     payment_match = re.search(r'(\d+\s*days\s*credit)', body, re.IGNORECASE)
+    #     if payment_match:
+    #         payment_terms = payment_match.group(1)
+
+    # print("Final Extracted:",
+    #       unit_price,
+    #       delivery_days,
+    #       payment_terms)
+    # ======================
+# STRONG FALLBACK REGEX
+# ======================
+
     if not unit_price:
-        price_match = re.search(r'(\d{3,6})', body)
+        price_match = re.search(r'(?:Rs\.?|INR)?\s?(\d{3,7})', body, re.IGNORECASE)
         if price_match:
             unit_price = float(price_match.group(1))
 
@@ -1046,14 +1069,9 @@ def save_quote(rfq_id, sender_email, body):
             delivery_days = delivery_match.group(1)
 
     if not payment_terms:
-        payment_match = re.search(r'(\d+\s*days\s*credit)', body, re.IGNORECASE)
+        payment_match = re.search(r'(advance|credit|payment.*)', body, re.IGNORECASE)
         if payment_match:
             payment_terms = payment_match.group(1)
-
-    print("Final Extracted:",
-          unit_price,
-          delivery_days,
-          payment_terms)
 
     # ======================
     # SAVE TO DATABASE
