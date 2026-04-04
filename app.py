@@ -738,7 +738,7 @@ def login_page():
         # cursor = conn.cursor()
         conn, cursor = get_cursor()
         cursor.execute(
-            "SELECT * FROM users WHERE username=? AND password=?",
+            "SELECT * FROM users WHERE username=%s AND password=%s",
             (username, password)
         )
 
@@ -786,7 +786,7 @@ def project_section():
         conn, cursor = get_cursor()
 
         cursor.execute(
-            "SELECT * FROM projects WHERE project_id=?",
+            "SELECT * FROM projects WHERE project_id=%s",
             (selected_project_code,)
         )
 
@@ -798,7 +798,7 @@ def project_section():
                 """
                 INSERT INTO projects
                 (project_id, project_name)
-                VALUES (?, ?)
+                VALUES (%s, %s)
                 """,
                 (selected_project_code, selected_project_code)
             )
@@ -806,7 +806,7 @@ def project_section():
             conn.commit()
 
         cursor.execute(
-            "SELECT id FROM projects WHERE project_id=?",
+            "SELECT id FROM projects WHERE project_id=%s",
             (selected_project_code,)
         )
 
@@ -924,7 +924,7 @@ def material_section():
             """
             INSERT INTO rfq_master
             (project_id, material_name, rfq_date, status)
-            VALUES (?, ?, datetime('now'), ?)
+            VALUES (%s, %s, datetime('now'), %s)
             """,
             (
                 st.session_state.active_project_id,
@@ -965,7 +965,7 @@ def material_section():
                 """
                 INSERT INTO vendor_quotes
                 (rfq_id, vendor_name, vendor_email, status)
-                VALUES (?, ?, ?, ?)
+                VALUES (%s, %s, %s, %s)
                 """,
                 (
                     rfq_id,
@@ -1035,7 +1035,7 @@ def rfq_tracking_section():
             rv.status
         FROM rfq_master rm
         LEFT JOIN vendor_quotes rv ON rm.rfq_id = rv.rfq_id
-        WHERE rm.project_id = ?
+        WHERE rm.project_id = %s
         ORDER BY rm.rfq_id DESC
         """,
         (selected_project_id,)
@@ -1087,7 +1087,7 @@ def comparison_section():
     # Select Material
     # =========================
     cursor.execute(
-        "SELECT DISTINCT material_name FROM rfq_master WHERE project_id=?",
+        "SELECT DISTINCT material_name FROM rfq_master WHERE project_id=%s",
         (selected_project_id,)
     )
     materials = cursor.fetchall()
@@ -1146,10 +1146,10 @@ def comparison_section():
             cursor.execute("""
             UPDATE vendor_quotes
             SET
-                unit_price = ?,
-                delivery_time = ?,
-                payment_terms = ?
-            WHERE rfq_id = ?
+                unit_price = %s,
+                delivery_time = %s,
+                payment_terms = %s
+            WHERE rfq_id = %s
             """, (
                 row["Unit Price"],
                 row["Delivery Time"],
@@ -1191,7 +1191,7 @@ def comparison_section():
         # Check if approval already exists
         cursor.execute("""
         SELECT * FROM vendor_approvals
-        WHERE project_id=? AND material_name=? AND vendor_name=? AND status='Pending'
+        WHERE project_id=%s AND material_name=%s AND vendor_name=%s AND status='Pending'
         """, (
         selected_project_id,
         selected_material,
@@ -1206,7 +1206,7 @@ def comparison_section():
             cursor.execute("""
             INSERT INTO vendor_approvals
             (project_id, material_name, vendor_name, unit_price, delivery_time, payment_terms, status)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
             """, (
             selected_project_id,
             selected_material,
@@ -1223,7 +1223,7 @@ def comparison_section():
         cursor.execute("""
         UPDATE rfq_master
         SET approval_status='Pending'
-        WHERE project_id=? AND material_name=?
+        WHERE project_id=%s AND material_name=%s
         """, (selected_project_id, selected_material))
 
         conn.commit()
@@ -1275,14 +1275,14 @@ def manager_approval_section():
                 cursor.execute("""
                 UPDATE vendor_approvals
                 SET status='Approved'
-                WHERE id=?
+                WHERE id=%s
                 """, (row['id'],))
 
                 cursor.execute("""
                 UPDATE rfq_master
                 SET
                     status='Vendor Approved'
-                WHERE project_id=? AND material_name=?
+                WHERE project_id=%s AND material_name=%s
                 """, (row['project_id'], row['material_name']))
 
                 conn.commit()
@@ -1295,13 +1295,13 @@ def manager_approval_section():
                 cursor.execute("""
                 UPDATE vendor_approvals
                 SET status='Rejected'
-                WHERE id=?
+                WHERE id=%s
                 """, (row['id'],))
 
                 cursor.execute("""
                 UPDATE rfq_master
                 SET status='Vendor Rejected'
-                WHERE project_id=? AND material_name=?
+                WHERE project_id=%s AND material_name=%s
                 """, (row['project_id'], row['material_name']))
 
                 conn.commit()
@@ -1343,7 +1343,7 @@ def costing_section():
     JOIN rfq_master rm 
         ON rm.project_id = va.project_id 
         AND LOWER(TRIM(rm.material_name)) = LOWER(TRIM(va.material_name))
-    WHERE va.project_id=? 
+    WHERE va.project_id=%s 
     AND va.status='Approved'
     """, (selected_project_id,))
 
