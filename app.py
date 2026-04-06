@@ -2006,7 +2006,7 @@ def comparison_section():
                      delivery_time, payment_terms, status)
                 VALUES (%s, %s, %s, %s, %s, %s, %s)
             """, (
-                selected_project_id,
+                int selected_project_id,
                 selected_material,
                 vendor_row["Vendor"],
                 vendor_row["Unit Price"],
