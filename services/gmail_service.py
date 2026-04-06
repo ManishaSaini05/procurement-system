@@ -1443,6 +1443,10 @@ def fetch_rfq_replies():
             print("RFQ:", rfq_id)
             print("Vendor:", sender_email)
 
+            print("====== FULL EMAIL ======")
+            print(body)
+            print("========================")
+            
             save_quote(rfq_id, sender_email, body)
 
         print("✅ Mailbox scan complete")
