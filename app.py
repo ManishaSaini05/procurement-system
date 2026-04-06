@@ -1144,7 +1144,7 @@ def comparison_section():
     )
     """, (selected_project_id, selected_material))
     
-    print("ROWS FROM DB:", rows)
+    #print("ROWS FROM DB:", rows)
     
     rows = cursor.fetchall()
     # df = pd.DataFrame([dict(r) for r in rows])
