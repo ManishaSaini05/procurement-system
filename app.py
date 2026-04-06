@@ -2035,65 +2035,65 @@ def comparison_section():
         #     st.success(f"✅ {vendor_row['Vendor']} sent to manager for approval.")
         if st.button("📤 Send Selected Vendor for Approval"):
 
-                selected_rows = edited_df[edited_df["Select Vendor"] == True]
+            selected_rows = edited_df[edited_df["Select Vendor"] == True]
 
-                if selected_rows.empty:
-                    st.warning("Please select a vendor first.")
+            if selected_rows.empty:
+                st.warning("Please select a vendor first.")
+                return
+
+            if len(selected_rows) > 1:
+                st.warning("Please select only one vendor for approval.")
+                return
+
+            vendor_row = selected_rows.iloc[0]
+
+            conn, cursor = get_cursor()
+
+            try:
+                cursor.execute("""
+                    SELECT id FROM vendor_approvals
+                    WHERE project_id=%s AND material_name=%s AND vendor_name=%s AND status='Pending'
+                """, (selected_project_id, selected_material, vendor_row["Vendor"]))
+
+                existing = cursor.fetchone()
+
+                if existing:
+                    st.warning("Approval request already sent for this vendor.")
+                    conn.close()
                     return
 
-                if len(selected_rows) > 1:
-                    st.warning("Please select only one vendor for approval.")
-                    return
+                cursor.execute("""
+                    INSERT INTO vendor_approvals
+                        (project_id, material_name, vendor_name, unit_price,
+                         delivery_time, payment_terms, status)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                """, (
+                    selected_project_id,
+                    selected_material,
+                    vendor_row["Vendor"],
+                    vendor_row["Unit Price"],
+                    vendor_row["Delivery Time"],
+                    vendor_row["Payment Terms"],
+                    "Pending"
+                ))
 
-                vendor_row = selected_rows.iloc[0]
+                cursor.execute("""
+                    UPDATE rfq_master
+                    SET approval_status = 'Pending'
+                    WHERE project_id=%s AND LOWER(TRIM(material_name)) = LOWER(TRIM(%s))
+                """, (selected_project_id, selected_material))
 
-                conn, cursor = get_cursor()
+                conn.commit()
+                conn.close()
 
-                try:
-                    cursor.execute("""
-                        SELECT id FROM vendor_approvals
-                        WHERE project_id=%s AND material_name=%s AND vendor_name=%s AND status='Pending'
-                    """, (selected_project_id, selected_material, vendor_row["Vendor"]))
+                send_approval_email(
+                    selected_project_id,
+                    selected_material,
+                    vendor_row["Vendor"],
+                    vendor_row["Unit Price"]
+                )
 
-                    existing = cursor.fetchone()
-
-                    if existing:
-                        st.warning("Approval request already sent for this vendor.")
-                        conn.close()
-                        return
-
-                    cursor.execute("""
-                        INSERT INTO vendor_approvals
-                            (project_id, material_name, vendor_name, unit_price,
-                             delivery_time, payment_terms, status)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s)
-                    """, (
-                        selected_project_id,
-                        selected_material,
-                        vendor_row["Vendor"],
-                        vendor_row["Unit Price"],
-                        vendor_row["Delivery Time"],
-                        vendor_row["Payment Terms"],
-                        "Pending"
-                    ))
-
-                    cursor.execute("""
-                        UPDATE rfq_master
-                        SET approval_status = 'Pending'
-                        WHERE project_id=%s AND LOWER(TRIM(material_name)) = LOWER(TRIM(%s))
-                    """, (selected_project_id, selected_material))
-
-                    conn.commit()
-                   conn.close()
-
-                   send_approval_email(
-                        selected_project_id,
-                        selected_material,
-                        vendor_row["Vendor"],
-                        vendor_row["Unit Price"]
-                   )
-
-                  st.success(f"✅ {vendor_row['Vendor']} sent to manager for approval.")
+                st.success(f"✅ {vendor_row['Vendor']} sent to manager for approval.")
 
     except Exception as e:
         conn.rollback()
