@@ -1232,6 +1232,228 @@
 #         save_quote(rfq_id, sender_email, full_text)
 
 #     print("Mailbox scan complete")
+#Correct code
+# import re
+# import imaplib
+# import email
+# import streamlit as st
+
+# from services.db import get_connection
+# from services.ai_extractor import extract_vendor_quote
+
+
+# # =====================================
+# # GMAIL CONNECTION (IMAP)
+# # =====================================
+
+# def get_gmail_connection():
+
+#     EMAIL = st.secrets["EMAIL"]
+#     APP_PASSWORD = st.secrets["APP_PASSWORD"]
+
+#     mail = imaplib.IMAP4_SSL("imap.gmail.com")
+#     mail.login(EMAIL, APP_PASSWORD)
+
+#     return mail
+
+
+# # =====================================
+# # SAVE VENDOR QUOTE
+# # =====================================
+
+# def save_quote(rfq_id, sender_email, body):
+
+#     conn = get_connection()
+#     cursor = conn.cursor()
+
+#     cursor.execute("""
+#         SELECT status FROM vendor_quotes
+#         WHERE rfq_id=%s AND vendor_email=%s
+#     """, (rfq_id, sender_email))
+
+#     row = cursor.fetchone()
+
+#     if not row:
+#         print("Vendor not found in RFQ list")
+#         conn.close()
+#         return
+
+#     if row["status"] == "Quote Received":
+#         print("Quote already processed")
+#         conn.close()
+#         return
+
+#     print("\nEMAIL BODY:")
+#     print(body)
+#     print("----------------------")
+
+#     # ======================
+#     # AI EXTRACTION
+#     # ======================
+#     # ai_data = extract_vendor_quote(body)
+
+#     # unit_price = ai_data.get("unit_price")
+#     # delivery_days = ai_data.get("delivery_days")
+#     # payment_terms = ai_data.get("payment_terms")
+
+#     # print("AI Extracted:", ai_data)
+
+#     # ======================
+#     # FALLBACK REGEX
+#     # ======================
+#     # if not unit_price:
+#     #     price_match = re.search(r'(?:Rs\.?|INR)?\s?(\d{3,7})', body, re.IGNORECASE)
+#     #     if price_match:
+#     #         unit_price = float(price_match.group(1))
+
+#     # if not delivery_days:
+#     #     delivery_match = re.search(r'(\d+\s*(days|weeks))', body, re.IGNORECASE)
+#     #     if delivery_match:
+#     #         delivery_days = delivery_match.group(1)
+
+#     # if not payment_terms:
+#     #     payment_match = re.search(r'(advance|credit|payment.*)', body, re.IGNORECASE)
+#     #     if payment_match:
+#     #         payment_terms = payment_match.group(1)
+
+#     # print("Final Extracted:", unit_price, delivery_days, payment_terms)
+
+#     ai_data = extract_vendor_quote(body)
+
+#     unit_price = ai_data.get("unit_price")
+#     delivery_days = ai_data.get("delivery_days")
+#     payment_terms = ai_data.get("payment_terms")
+
+#     print("AI Extracted:", ai_data)
+
+# # ======================
+# # FALLBACK REGEX
+# # ======================
+
+#     if not unit_price:
+#         price_match = re.search(r'(?:Rs\.?|INR)?\s?(\d{2,7})', body, re.IGNORECASE)
+#         if price_match:
+#             unit_price = float(price_match.group(1))
+
+#     if not delivery_days:
+#         delivery_match = re.search(r'(\d+\s*(days?|weeks?))', body, re.IGNORECASE)
+#         if delivery_match:
+#             delivery_days = delivery_match.group(1)
+
+#     if not payment_terms:
+#         payment_match = re.search(r'(advance|credit|payment.*)', body, re.IGNORECASE)
+#         if payment_match:
+#             payment_terms = payment_match.group(1)
+
+#     # ======================
+#     # SAVE TO DATABASE
+#     # ======================
+#     cursor.execute("""
+#         UPDATE vendor_quotes
+#         SET
+#             unit_price = %s,
+#             delivery_time = %s,
+#             payment_terms = %s,
+#             raw_email = %s,
+#             email_received_date = CURRENT_TIMESTAMP,
+#             status = 'Quote Received'
+#         WHERE rfq_id = %s AND LOWER(vendor_email) = %s
+#     """, (
+#         unit_price,
+#         delivery_days,
+#         payment_terms,
+#         body,
+#         rfq_id,
+#         sender_email.lower()
+#     ))
+
+#     conn.commit()
+#     conn.close()
+
+#     print("Saving to DB:")
+#     print("RFQ:", rfq_id)
+#     print("Email:", sender_email)
+#     print("Price:", unit_price)
+#     print("Delivery:", delivery_days)
+#     print("Payment:", payment_terms)
+
+#     print("✅ Quote stored successfully")
+
+
+# # =====================================
+# # FETCH RFQ EMAIL REPLIES (IMAP)
+# # =====================================
+
+# def fetch_rfq_replies():
+
+#     print("Checking mailbox for RFQ replies...")
+
+#     try:
+#         mail = get_gmail_connection()
+#         mail.select("inbox")
+
+#         status, messages = mail.search(None, '(UNSEEN SUBJECT "RFQ")')
+#         email_ids = messages[0].split()
+
+#         print("Emails found:", len(email_ids))
+
+#         for num in email_ids:
+
+#             status, msg_data = mail.fetch(num, "(RFC822)")
+#             msg = email.message_from_bytes(msg_data[0][1])
+
+#             subject = msg["subject"]
+#             sender = msg["from"]
+
+#             # ======================
+#             # RFQ ID EXTRACT
+#             # ======================
+#             rfq_match = re.search(r"RFQ[- ]?(\d+)", subject, re.IGNORECASE)
+
+#             if not rfq_match:
+#                 continue
+
+#             rfq_id = int(rfq_match.group(1))
+
+#             # ======================
+#             # EXTRACT EMAIL
+#             # ======================
+#             sender_email = re.findall(r'<(.+?)>', sender)
+#             sender_email = sender_email[0] if sender_email else sender
+
+#             # ======================
+#             # EXTRACT BODY
+#             # ======================
+#             body = ""
+
+#             if msg.is_multipart():
+#                 for part in msg.walk():
+#                     if part.get_content_type() == "text/plain":
+#                         body = part.get_payload(decode=True).decode(errors="ignore")
+#                         break
+#             else:
+#                 body = msg.get_payload(decode=True).decode(errors="ignore")
+                
+#             full_text = body
+            
+#             print("EMAIL BODY:")
+#             print(body[:500])
+
+#             print("\n📩 Vendor Reply Found")
+#             print("RFQ:", rfq_id)
+#             print("Vendor:", sender_email)
+
+#             print("====== FULL EMAIL ======")
+#             print(body)
+#             print("========================")
+            
+#             save_quote(rfq_id, sender_email, body)
+
+#         print("✅ Mailbox scan complete")
+
+#     except Exception as e:
+#         print("❌ ERROR:", str(e))
+#         raise e
 
 import re
 import imaplib
@@ -1266,9 +1488,11 @@ def save_quote(rfq_id, sender_email, body):
     conn = get_connection()
     cursor = conn.cursor()
 
+    sender_email = sender_email.strip().lower()
+
     cursor.execute("""
         SELECT status FROM vendor_quotes
-        WHERE rfq_id=%s AND vendor_email=%s
+        WHERE rfq_id=%s AND LOWER(vendor_email)=%s
     """, (rfq_id, sender_email))
 
     row = cursor.fetchone()
@@ -1283,41 +1507,13 @@ def save_quote(rfq_id, sender_email, body):
         conn.close()
         return
 
-    print("\nEMAIL BODY:")
+    print("\n====== FULL EMAIL ======")
     print(body)
-    print("----------------------")
+    print("========================")
 
     # ======================
     # AI EXTRACTION
     # ======================
-    # ai_data = extract_vendor_quote(body)
-
-    # unit_price = ai_data.get("unit_price")
-    # delivery_days = ai_data.get("delivery_days")
-    # payment_terms = ai_data.get("payment_terms")
-
-    # print("AI Extracted:", ai_data)
-
-    # ======================
-    # FALLBACK REGEX
-    # ======================
-    # if not unit_price:
-    #     price_match = re.search(r'(?:Rs\.?|INR)?\s?(\d{3,7})', body, re.IGNORECASE)
-    #     if price_match:
-    #         unit_price = float(price_match.group(1))
-
-    # if not delivery_days:
-    #     delivery_match = re.search(r'(\d+\s*(days|weeks))', body, re.IGNORECASE)
-    #     if delivery_match:
-    #         delivery_days = delivery_match.group(1)
-
-    # if not payment_terms:
-    #     payment_match = re.search(r'(advance|credit|payment.*)', body, re.IGNORECASE)
-    #     if payment_match:
-    #         payment_terms = payment_match.group(1)
-
-    # print("Final Extracted:", unit_price, delivery_days, payment_terms)
-
     ai_data = extract_vendor_quote(body)
 
     unit_price = ai_data.get("unit_price")
@@ -1326,24 +1522,34 @@ def save_quote(rfq_id, sender_email, body):
 
     print("AI Extracted:", ai_data)
 
-# ======================
-# FALLBACK REGEX
-# ======================
+    # ======================
+    # FALLBACK REGEX (STRONG)
+    # ======================
+    clean_body = body.replace(",", "").replace("\n", " ")
 
+    # PRICE
     if not unit_price:
-        price_match = re.search(r'(?:Rs\.?|INR)?\s?(\d{2,7})', body, re.IGNORECASE)
+        price_match = re.search(r'(?:rs\.?|inr)?\s?(\d{3,7})', clean_body, re.IGNORECASE)
         if price_match:
             unit_price = float(price_match.group(1))
 
+    # DELIVERY
     if not delivery_days:
-        delivery_match = re.search(r'(\d+\s*(days?|weeks?))', body, re.IGNORECASE)
+        delivery_match = re.search(r'(\d+)\s*(day|days|week|weeks)', clean_body, re.IGNORECASE)
         if delivery_match:
-            delivery_days = delivery_match.group(1)
+            delivery_days = delivery_match.group(0)
 
+    # PAYMENT
     if not payment_terms:
-        payment_match = re.search(r'(advance|credit|payment.*)', body, re.IGNORECASE)
+        payment_match = re.search(r'(advance|credit|payment\s*\d+\s*days)', clean_body, re.IGNORECASE)
         if payment_match:
-            payment_terms = payment_match.group(1)
+            payment_terms = payment_match.group(0)
+
+    print("====== FINAL EXTRACTED ======")
+    print("Price:", unit_price)
+    print("Delivery:", delivery_days)
+    print("Payment:", payment_terms)
+    print("============================")
 
     # ======================
     # SAVE TO DATABASE
@@ -1364,18 +1570,11 @@ def save_quote(rfq_id, sender_email, body):
         payment_terms,
         body,
         rfq_id,
-        sender_email.lower()
+        sender_email
     ))
 
     conn.commit()
     conn.close()
-
-    print("Saving to DB:")
-    print("RFQ:", rfq_id)
-    print("Email:", sender_email)
-    print("Price:", unit_price)
-    print("Delivery:", delivery_days)
-    print("Payment:", payment_terms)
 
     print("✅ Quote stored successfully")
 
@@ -1405,48 +1604,40 @@ def fetch_rfq_replies():
             subject = msg["subject"]
             sender = msg["from"]
 
-            # ======================
-            # RFQ ID EXTRACT
-            # ======================
-            rfq_match = re.search(r"RFQ[- ]?(\d+)", subject, re.IGNORECASE)
-
+            # RFQ ID
+            rfq_match = re.search(r"RFQ[- ]?(\d+)", subject or "", re.IGNORECASE)
             if not rfq_match:
                 continue
 
             rfq_id = int(rfq_match.group(1))
 
-            # ======================
-            # EXTRACT EMAIL
-            # ======================
-            sender_email = re.findall(r'<(.+?)>', sender)
+            # EMAIL
+            sender_email = re.findall(r'<(.+?)>', sender or "")
             sender_email = sender_email[0] if sender_email else sender
+            sender_email = sender_email.strip().lower()
 
-            # ======================
-            # EXTRACT BODY
-            # ======================
+            # BODY (ROBUST)
             body = ""
 
             if msg.is_multipart():
                 for part in msg.walk():
-                    if part.get_content_type() == "text/plain":
-                        body = part.get_payload(decode=True).decode(errors="ignore")
-                        break
+                    content_type = part.get_content_type()
+                    content_disposition = str(part.get("Content-Disposition"))
+
+                    if content_type == "text/plain" and "attachment" not in content_disposition:
+                        payload = part.get_payload(decode=True)
+                        if payload:
+                            body = payload.decode(errors="ignore")
+                            break
             else:
-                body = msg.get_payload(decode=True).decode(errors="ignore")
-                
-            full_text = body
-            
-            print("EMAIL BODY:")
-            print(body[:500])
+                payload = msg.get_payload(decode=True)
+                if payload:
+                    body = payload.decode(errors="ignore")
 
             print("\n📩 Vendor Reply Found")
             print("RFQ:", rfq_id)
             print("Vendor:", sender_email)
 
-            print("====== FULL EMAIL ======")
-            print(body)
-            print("========================")
-            
             save_quote(rfq_id, sender_email, body)
 
         print("✅ Mailbox scan complete")
