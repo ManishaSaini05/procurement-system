@@ -2042,9 +2042,9 @@ def comparison_section():
                 st.warning("Please select a vendor first.")
                 return
 
-            if len(selected_rows) > 1:
-                st.warning("Please select only one vendor for approval.")
-                return
+            # if len(selected_rows) > 1:
+            #     st.warning("Please select only one vendor for approval.")
+            #     return
 
             vendor_row = selected_rows.iloc[0]
 
@@ -2139,14 +2139,24 @@ def manager_approval_section():
             with col1:
                 if st.button(f"✅ Approve", key=f"approve_{row['id']}"):
                     conn2, cursor2 = get_cursor()
+                    # cursor2.execute(
+                    #     "UPDATE vendor_approvals SET status='Approved' WHERE id=%s",
+                    #     (row["id"],)
+                    # )
+                    # cursor2.execute("""
+                    #     UPDATE rfq_master SET status='Vendor Approved'
+                    #     WHERE project_id=%s AND LOWER(TRIM(material_name))=LOWER(TRIM(%s))
+                    # """, (row["project_id"], row["material_name"]))
+
                     cursor2.execute(
                         "UPDATE vendor_approvals SET status='Approved' WHERE id=%s",
                         (row["id"],)
                     )
                     cursor2.execute("""
-                        UPDATE rfq_master SET status='Vendor Approved'
+                        UPDATE rfq_master SET status='Vendor Approved', approval_status='Approved'
                         WHERE project_id=%s AND LOWER(TRIM(material_name))=LOWER(TRIM(%s))
                     """, (row["project_id"], row["material_name"]))
+
                     conn2.commit()
                     conn2.close()
                     st.success("Vendor Approved ✅")
@@ -2155,15 +2165,24 @@ def manager_approval_section():
             with col2:
                 if st.button(f"❌ Reject", key=f"reject_{row['id']}"):
                     conn2, cursor2 = get_cursor()
+                    # cursor2.execute(
+                    #     "UPDATE vendor_approvals SET status='Rejected' WHERE id=%s",
+                    #     (row["id"],)
+                    # )
+                    # cursor2.execute("""
+                    #     UPDATE rfq_master SET status='Vendor Rejected'
+                    #     WHERE project_id=%s AND LOWER(TRIM(material_name))=LOWER(TRIM(%s))
+                    # """, (row["project_id"], row["material_name"]))
+                    # conn2.commit()
                     cursor2.execute(
                         "UPDATE vendor_approvals SET status='Rejected' WHERE id=%s",
-                        (row["id"],)
+                       (row["id"],)
                     )
                     cursor2.execute("""
-                        UPDATE rfq_master SET status='Vendor Rejected'
+                        UPDATE rfq_master SET status='Vendor Rejected', approval_status='Rejected'
                         WHERE project_id=%s AND LOWER(TRIM(material_name))=LOWER(TRIM(%s))
                     """, (row["project_id"], row["material_name"]))
-                    conn2.commit()
+
                     conn2.close()
                     st.success("Vendor Rejected")
                     st.rerun()
