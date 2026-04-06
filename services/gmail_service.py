@@ -1434,7 +1434,6 @@ def fetch_rfq_replies():
             else:
                 body = msg.get_payload(decode=True).decode(errors="ignore")
                 
-            body = get_email_body(payload)
             full_text = body
             
             print("EMAIL BODY:")
