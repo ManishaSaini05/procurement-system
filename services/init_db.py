@@ -164,10 +164,108 @@
 # conn.close()
 
 # print("Database initialized successfully")
+#correct
 
-import sqlite3
+# import sqlite3
 
-conn = sqlite3.connect("procurement.db")
+# conn = sqlite3.connect("procurement.db")
+# cursor = conn.cursor()
+
+# # =========================
+# # USERS (LOGIN)
+# # =========================
+# cursor.execute("""
+# CREATE TABLE IF NOT EXISTS users (
+#     id INTEGER PRIMARY KEY AUTOINCREMENT,
+#     username TEXT UNIQUE,
+#     password TEXT
+# )
+# """)
+
+# # =========================
+# # PROJECTS
+# # =========================
+# cursor.execute("""
+# CREATE TABLE IF NOT EXISTS projects (
+#     id INTEGER PRIMARY KEY AUTOINCREMENT,
+#     project_id TEXT UNIQUE,
+#     project_name TEXT
+# )
+# """)
+
+# # =========================
+# # RFQ MASTER
+# # =========================
+# cursor.execute("""
+# CREATE TABLE IF NOT EXISTS rfq_master (
+#     rfq_id INTEGER PRIMARY KEY AUTOINCREMENT,
+#     project_id INTEGER,
+#     material_name TEXT,
+#     quantity REAL,
+#     uom TEXT,
+#     specification TEXT,
+#     rfq_date TEXT,
+#     status TEXT,
+#     approval_status TEXT
+# )
+# """)
+
+# # =========================
+# # VENDOR QUOTES
+# # =========================
+# cursor.execute("""
+# CREATE TABLE IF NOT EXISTS vendor_quotes (
+#     id INTEGER PRIMARY KEY AUTOINCREMENT,
+#     rfq_id INTEGER,
+#     vendor_name TEXT,
+#     vendor_email TEXT,
+#     unit_price REAL,
+#     delivery_time TEXT,
+#     payment_terms TEXT,
+#     email_received_date TEXT,
+#     raw_email TEXT,
+#     status TEXT
+# )
+# """)
+
+# # =========================
+# # VENDOR APPROVALS
+# # =========================
+# cursor.execute("""
+# CREATE TABLE IF NOT EXISTS vendor_approvals (
+#     id INTEGER PRIMARY KEY AUTOINCREMENT,
+#     project_id INTEGER,
+#     material_name TEXT,
+#     vendor_name TEXT,
+#     unit_price REAL,
+#     delivery_time TEXT,
+#     payment_terms TEXT,
+#     status TEXT
+# )
+# """)
+
+# conn.commit()
+# conn.close()
+
+# print("✅ Database initialized successfully")
+
+"""
+init_db.py
+
+Run once to create all tables in your PostgreSQL database.
+Requires DATABASE_URL set in environment:
+    export DATABASE_URL="postgresql://user:password@host:port/dbname"
+"""
+
+import os
+import psycopg2
+
+DATABASE_URL = os.getenv("DATABASE_URL")
+
+if not DATABASE_URL:
+    raise RuntimeError("DATABASE_URL environment variable not set.")
+
+conn = psycopg2.connect(DATABASE_URL)
 cursor = conn.cursor()
 
 # =========================
@@ -175,9 +273,9 @@ cursor = conn.cursor()
 # =========================
 cursor.execute("""
 CREATE TABLE IF NOT EXISTS users (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    username TEXT UNIQUE,
-    password TEXT
+    id SERIAL PRIMARY KEY,
+    username TEXT UNIQUE NOT NULL,
+    password TEXT NOT NULL
 )
 """)
 
@@ -186,9 +284,21 @@ CREATE TABLE IF NOT EXISTS users (
 # =========================
 cursor.execute("""
 CREATE TABLE IF NOT EXISTS projects (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    project_id TEXT UNIQUE,
+    id SERIAL PRIMARY KEY,
+    project_id TEXT UNIQUE NOT NULL,
     project_name TEXT
+)
+""")
+
+# =========================
+# VENDORS (master list)
+# =========================
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS vendors (
+    id SERIAL PRIMARY KEY,
+    vendor_name TEXT NOT NULL,
+    email TEXT UNIQUE NOT NULL,
+    phone TEXT
 )
 """)
 
@@ -197,13 +307,13 @@ CREATE TABLE IF NOT EXISTS projects (
 # =========================
 cursor.execute("""
 CREATE TABLE IF NOT EXISTS rfq_master (
-    rfq_id INTEGER PRIMARY KEY AUTOINCREMENT,
-    project_id INTEGER,
+    rfq_id SERIAL PRIMARY KEY,
+    project_id INTEGER REFERENCES projects(id),
     material_name TEXT,
     quantity REAL,
     uom TEXT,
     specification TEXT,
-    rfq_date TEXT,
+    rfq_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     status TEXT,
     approval_status TEXT
 )
@@ -214,14 +324,15 @@ CREATE TABLE IF NOT EXISTS rfq_master (
 # =========================
 cursor.execute("""
 CREATE TABLE IF NOT EXISTS vendor_quotes (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    rfq_id INTEGER,
+    id SERIAL PRIMARY KEY,
+    rfq_id INTEGER REFERENCES rfq_master(rfq_id),
     vendor_name TEXT,
     vendor_email TEXT,
     unit_price REAL,
+    quantity REAL DEFAULT 0,
     delivery_time TEXT,
     payment_terms TEXT,
-    email_received_date TEXT,
+    email_received_date TIMESTAMP,
     raw_email TEXT,
     status TEXT
 )
@@ -232,18 +343,28 @@ CREATE TABLE IF NOT EXISTS vendor_quotes (
 # =========================
 cursor.execute("""
 CREATE TABLE IF NOT EXISTS vendor_approvals (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    project_id INTEGER,
+    id SERIAL PRIMARY KEY,
+    project_id INTEGER REFERENCES projects(id),
     material_name TEXT,
     vendor_name TEXT,
     unit_price REAL,
     delivery_time TEXT,
     payment_terms TEXT,
-    status TEXT
+    status TEXT DEFAULT 'Pending'
 )
+""")
+
+# =========================
+# DEFAULT ADMIN USER
+# =========================
+cursor.execute("""
+INSERT INTO users (username, password)
+VALUES ('admin', 'admin123')
+ON CONFLICT (username) DO NOTHING
 """)
 
 conn.commit()
 conn.close()
 
-print("✅ Database initialized successfully")
+print("✅ PostgreSQL database initialized successfully")
+print("   Default login: admin / admin123  (change this in production!)")
