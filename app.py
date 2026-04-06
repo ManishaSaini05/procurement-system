@@ -1767,19 +1767,18 @@ def material_section():
             INSERT INTO rfq_master
                 (project_id, material_name, quantity, uom, specification, rfq_date, status)
             VALUES (%s, %s, %s, %s, %s, CURRENT_TIMESTAMP, %s)
-            RETURNING rfq_id
             """,
             (
                 st.session_state.active_project_id,
                 selected_material,
-                quantity,
-                uom,
-                specification,
+                float(quantity),
+                str(uom),
+                str(specification),
                 "Sent"
             )
         )
-
-        rfq_id = cursor.fetchone()["rfq_id"]
+        cursor.execute("SELECT lastval()")
+        rfq_id = cursor.fetchone()[0]
 
         for _, row in selected_rows.iterrows():
             vendor_name = row["Vendor_Name"]
