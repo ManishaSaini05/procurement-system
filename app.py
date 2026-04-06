@@ -1148,7 +1148,7 @@ def comparison_section():
     rows = cursor.fetchall()
     # df = pd.DataFrame([dict(r) for r in rows])
     if not rows:
-    st.warning("No quotes found.")
+        st.warning("No quotes found.")
     return
 
     df = pd.DataFrame([dict(r) for r in rows])
