@@ -1999,8 +1999,13 @@ def comparison_section():
                 st.warning("Approval request already sent for this vendor.")
                 conn.close()
                 return
-            st.write("project_id value:", selected_project_id)
-            st.write("project_id type:", type(selected_project_id))
+            
+            st.write("material:", selected_material)
+            st.write("vendor:", vendor_row["Vendor"])
+            st.write("unit_price:", vendor_row["Unit Price"])
+            st.write("delivery:", vendor_row["Delivery Time"])
+            st.write("payment:", vendor_row["Payment Terms"])
+
             cursor.execute("""
                 INSERT INTO vendor_approvals
                     (project_id, material_name, vendor_name, unit_price,
