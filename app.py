@@ -2071,7 +2071,7 @@ def comparison_section():
                     selected_project_id,
                     selected_material,
                     vendor_row["Vendor"],
-                    float(vendor_row["Unit Price"]),,
+                    float(vendor_row["Unit Price"]),
                     vendor_row["Delivery Time"],
                     vendor_row["Payment Terms"],
                     "Pending"
