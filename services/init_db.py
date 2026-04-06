@@ -260,8 +260,8 @@ Requires DATABASE_URL set in environment:
 import os
 import psycopg2
 
+#DATABASE_URL = "postgresql://neondb_owner:npg_BT0EdZg8QNWG@ep-restless-violet-amowt0f0-pooler.c-5.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require"
 DATABASE_URL = os.getenv("DATABASE_URL")
-
 if not DATABASE_URL:
     raise RuntimeError("DATABASE_URL environment variable not set.")
 
