@@ -2095,11 +2095,11 @@ def comparison_section():
 
                 st.success(f"✅ {vendor_row['Vendor']} sent to manager for approval.")
 
-    except Exception as e:
-        conn.rollback()
-        conn.close()
-        st.error("Error details:")
-        st.exception(e)
+            except Exception as e:
+                conn.rollback()
+                conn.close()
+                st.error("Error details:")
+                st.exception(e)
 
 # =========================
 # MANAGER APPROVAL
