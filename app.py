@@ -1850,6 +1850,7 @@ def rfq_tracking_section():
             rm.status        AS "RFQ Status",
             rv.vendor_name   AS "Vendor",
             rv.status        AS "Vendor Status"
+            rm.approval_status  AS "Approval Status"
         FROM rfq_master rm
         LEFT JOIN vendor_quotes rv ON rm.rfq_id = rv.rfq_id
         WHERE rm.project_id = %s
