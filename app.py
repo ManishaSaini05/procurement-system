@@ -1591,7 +1591,6 @@ if "active_project_id" not in st.session_state:
 # LOAD FILES
 # =========================
 
-@st.cache_data
 def load_boq():
     path = Path("data/Design_boq.xlsx")
     if not path.exists():
@@ -1599,7 +1598,6 @@ def load_boq():
     return pd.read_excel(path)
 
 
-@st.cache_data
 def load_vendor_data():
     path = Path("data/past_vendor_data.xlsx")
     if not path.exists():
@@ -1849,12 +1847,8 @@ def rfq_tracking_section():
         SELECT
             rm.rfq_id        AS "RFQ ID",
             rm.material_name AS "Material",
-            rm.quantity      AS "Quantity",
-            rm.uom           AS "UOM",
             rm.status        AS "RFQ Status",
             rv.vendor_name   AS "Vendor",
-            rv.unit_price    AS "Unit Price",
-            rv.delivery_time AS "Delivery",
             rv.status        AS "Vendor Status"
         FROM rfq_master rm
         LEFT JOIN vendor_quotes rv ON rm.rfq_id = rv.rfq_id
