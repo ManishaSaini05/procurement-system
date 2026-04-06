@@ -1290,6 +1290,34 @@ def save_quote(rfq_id, sender_email, body):
     # ======================
     # AI EXTRACTION
     # ======================
+    # ai_data = extract_vendor_quote(body)
+
+    # unit_price = ai_data.get("unit_price")
+    # delivery_days = ai_data.get("delivery_days")
+    # payment_terms = ai_data.get("payment_terms")
+
+    # print("AI Extracted:", ai_data)
+
+    # ======================
+    # FALLBACK REGEX
+    # ======================
+    # if not unit_price:
+    #     price_match = re.search(r'(?:Rs\.?|INR)?\s?(\d{3,7})', body, re.IGNORECASE)
+    #     if price_match:
+    #         unit_price = float(price_match.group(1))
+
+    # if not delivery_days:
+    #     delivery_match = re.search(r'(\d+\s*(days|weeks))', body, re.IGNORECASE)
+    #     if delivery_match:
+    #         delivery_days = delivery_match.group(1)
+
+    # if not payment_terms:
+    #     payment_match = re.search(r'(advance|credit|payment.*)', body, re.IGNORECASE)
+    #     if payment_match:
+    #         payment_terms = payment_match.group(1)
+
+    # print("Final Extracted:", unit_price, delivery_days, payment_terms)
+
     ai_data = extract_vendor_quote(body)
 
     unit_price = ai_data.get("unit_price")
@@ -1298,16 +1326,17 @@ def save_quote(rfq_id, sender_email, body):
 
     print("AI Extracted:", ai_data)
 
-    # ======================
-    # FALLBACK REGEX
-    # ======================
+# ======================
+# FALLBACK REGEX
+# ======================
+
     if not unit_price:
-        price_match = re.search(r'(?:Rs\.?|INR)?\s?(\d{3,7})', body, re.IGNORECASE)
+        price_match = re.search(r'(?:Rs\.?|INR)?\s?(\d{2,7})', body, re.IGNORECASE)
         if price_match:
             unit_price = float(price_match.group(1))
 
     if not delivery_days:
-        delivery_match = re.search(r'(\d+\s*(days|weeks))', body, re.IGNORECASE)
+        delivery_match = re.search(r'(\d+\s*(days?|weeks?))', body, re.IGNORECASE)
         if delivery_match:
             delivery_days = delivery_match.group(1)
 
@@ -1315,8 +1344,6 @@ def save_quote(rfq_id, sender_email, body):
         payment_match = re.search(r'(advance|credit|payment.*)', body, re.IGNORECASE)
         if payment_match:
             payment_terms = payment_match.group(1)
-
-    print("Final Extracted:", unit_price, delivery_days, payment_terms)
 
     # ======================
     # SAVE TO DATABASE
@@ -1330,18 +1357,25 @@ def save_quote(rfq_id, sender_email, body):
             raw_email = %s,
             email_received_date = CURRENT_TIMESTAMP,
             status = 'Quote Received'
-        WHERE rfq_id = %s AND vendor_email = %s
+        WHERE rfq_id = %s AND LOWER(vendor_email) = %s
     """, (
         unit_price,
         delivery_days,
         payment_terms,
         body,
         rfq_id,
-        sender_email
+        sender_email.lower()
     ))
 
     conn.commit()
     conn.close()
+
+    print("Saving to DB:")
+    print("RFQ:", rfq_id)
+    print("Email:", sender_email)
+    print("Price:", unit_price)
+    print("Delivery:", delivery_days)
+    print("Payment:", payment_terms)
 
     print("✅ Quote stored successfully")
 
@@ -1399,6 +1433,12 @@ def fetch_rfq_replies():
                         break
             else:
                 body = msg.get_payload(decode=True).decode(errors="ignore")
+                
+            body = get_email_body(payload)
+            full_text = body
+            
+            print("EMAIL BODY:")
+            print(body[:500])
 
             print("\n📩 Vendor Reply Found")
             print("RFQ:", rfq_id)
