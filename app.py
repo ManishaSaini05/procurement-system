@@ -1140,11 +1140,12 @@ def comparison_section():
     FROM vendor_quotes
     WHERE rfq_id IN (
         SELECT rfq_id FROM rfq_master
-        WHERE project_id = %s AND material_name = %s
+        WHERE project_id = %s AND LOWER(TRIM(material_name)) = LOWER(TRIM(%s))
     )
     """, (selected_project_id, selected_material))
     
-
+    print("ROWS FROM DB:", rows)
+    
     rows = cursor.fetchall()
     # df = pd.DataFrame([dict(r) for r in rows])
     if not rows:
