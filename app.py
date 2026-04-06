@@ -1777,8 +1777,8 @@ def material_section():
                 "Sent"
             )
         )
-        cursor.execute("SELECT lastval()")
-        rfq_id = cursor.fetchone()[0]
+        cursor.execute("SELECT lastval() AS rfq_id")
+        rfq_id = cursor.fetchone()["rfq_id"]
 
         for _, row in selected_rows.iterrows():
             vendor_name = row["Vendor_Name"]
