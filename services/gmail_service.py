@@ -1485,15 +1485,16 @@ def get_gmail_connection():
 
 def save_quote(rfq_id, sender_email, body):
 
-    conn = get_connection()
-    cursor = conn.cursor()
+    from services.db import get_cursor
+
+    conn, cursor = get_cursor()
 
     sender_email = sender_email.strip().lower()
 
     cursor.execute("""
         SELECT status FROM vendor_quotes
         WHERE rfq_id=%s AND LOWER(vendor_email)=%s
-    """, (rfq_id, sender_email))
+    """, (rfq_id, sender_email.lower()))
 
     row = cursor.fetchone()
 
