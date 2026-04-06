@@ -159,7 +159,7 @@ APP_URL = "http://localhost:8501/?page=approval"
 def _get_email_config():
     return (
         st.secrets["SENDER_EMAIL"],
-        st.secrets["SENDER_PASSWORD"],
+        st.secrets["APP_PASSWORD"],
         st.secrets["MANAGER_EMAIL"],
     )
 
