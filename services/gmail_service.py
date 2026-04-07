@@ -1851,7 +1851,7 @@ from services.ai_extractor import extract_vendor_quote
 # =====================================
 
 def get_gmail_connection():
-    EMAIL = st.secrets["SENDER_EMAIL"]
+    SENDER_EMAILEMAIL = st.secrets["SENDER_EMAIL"]
     APP_PASSWORD = st.secrets["APP_PASSWORD"]
 
     mail = imaplib.IMAP4_SSL("imap.gmail.com")
