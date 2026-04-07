@@ -170,7 +170,7 @@ def _get_email_config():
 
 def send_rfq_email(vendor_email, vendor_name, material, quantity, uom, specification, rfq_id, project_id):
 
-    SENDER_EMAIL, SENDER_PASSWORD, _ = _get_email_config()
+    SENDER_EMAIL, APP_PASSWORD, _ = _get_email_config()
 
     try:
         body = f"""
@@ -199,7 +199,7 @@ def send_rfq_email(vendor_email, vendor_name, material, quantity, uom, specifica
         msg.attach(MIMEText(body, "html"))
 
         with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
-            server.login(SENDER_EMAIL, SENDER_PASSWORD)
+            server.login(SENDER_EMAIL, APP_PASSWORD)
             server.sendmail(SENDER_EMAIL, [vendor_email], msg.as_string())
 
         return True
@@ -215,7 +215,7 @@ def send_rfq_email(vendor_email, vendor_name, material, quantity, uom, specifica
 
 def send_approval_email(project_id, material, vendor, unit_price):
 
-    SENDER_EMAIL, SENDER_PASSWORD, MANAGER_EMAIL = _get_email_config()
+    SENDER_EMAIL, APP_PASSWORD, MANAGER_EMAIL = _get_email_config()
 
     try:
         body = f"""
@@ -244,7 +244,7 @@ def send_approval_email(project_id, material, vendor, unit_price):
         msg.attach(MIMEText(body, "html"))
 
         with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
-            server.login(SENDER_EMAIL, SENDER_PASSWORD)
+            server.login(SENDER_EMAIL, APP_PASSWORD)
             server.sendmail(SENDER_EMAIL, [MANAGER_EMAIL], msg.as_string())
 
         return True
