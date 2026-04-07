@@ -1851,11 +1851,11 @@ from services.ai_extractor import extract_vendor_quote
 # =====================================
 
 def get_gmail_connection():
-    SENDER_EMAILEMAIL = st.secrets["SENDER_EMAIL"]
+    EMAIL = st.secrets["SENDER_EMAIL"]
     APP_PASSWORD = st.secrets["APP_PASSWORD"]
 
     mail = imaplib.IMAP4_SSL("imap.gmail.com")
-    mail.login(SENDER_EMAIL, APP_PASSWORD)
+    mail.login(EMAIL, APP_PASSWORD)
     return mail
 
 
