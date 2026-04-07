@@ -171,6 +171,81 @@
 #         print("Claude extraction failed:", e)
 #         return {}
 
+# import json
+# import re
+# import os
+# from anthropic import Anthropic
+
+# client = Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+
+
+# def extract_vendor_quote(text):
+#     """
+#     Extract unit_price, delivery_days, payment_terms from
+#     vendor email body and/or PDF quotation text.
+#     """
+
+#     prompt = f"""
+# You are a procurement assistant extracting data from a vendor quotation.
+# The text below may come from an email body, a PDF quotation, or both.
+
+# Extract ONLY these 3 fields:
+
+# 1. unit_price
+#    - Look for: Unit Price, Rate, Price Per Unit, Per Piece, Per Nos
+#    - Extract the PER UNIT price only (not total price, not grand total)
+#    - Return numeric value only, no currency symbol
+#    - Example: 4200
+
+# 2. delivery_days
+#    - Look for: Delivery, Lead Time, Delivery Period, Dispatch
+#    - Return as a string
+#    - Example: "21 days from receipt of PO", "4 weeks", "immediate"
+
+# 3. payment_terms
+#    - Look for: Payment Terms, Payment Conditions
+#    - Return as a string
+#    - Example: "100% payment against Proforma Invoice", "30 days credit"
+
+# Rules:
+# - Return ONLY valid JSON, no extra text, no markdown
+# - If a field is not found return null
+# - Do NOT return total price or grand total as unit_price
+# - The unit price is typically in the "Unit Price" column of a table
+
+# Example output:
+# {{
+#     "unit_price": 4200,
+#     "delivery_days": "21 days from receipt of PO",
+#     "payment_terms": "100% payment against Proforma Invoice"
+# }}
+
+# Quotation Text:
+# {text}
+# """
+
+#     try:
+#         response = client.messages.create(
+#             model="claude-haiku-4-5-20251001",
+#             max_tokens=300,
+#             messages=[{"role": "user", "content": prompt}]
+#         )
+
+#         text_response = response.content[0].text.strip()
+
+#         # Strip markdown fences if present
+#         text_response = re.sub(r"```json|```", "", text_response).strip()
+
+#         json_match = re.search(r"\{.*\}", text_response, re.DOTALL)
+#         if json_match:
+#             return json.loads(json_match.group())
+
+#         return {}
+
+#     except Exception as e:
+#         print("Claude extraction failed:", e)
+#         return {}
+
 import json
 import re
 import os
@@ -180,48 +255,102 @@ client = Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
 
 
 def extract_vendor_quote(text):
-    """
-    Extract unit_price, delivery_days, payment_terms from
-    vendor email body and/or PDF quotation text.
-    """
+
+    # =============================================
+    # STEP 1: REGEX EXTRACTION (fast, reliable)
+    # Works directly on the structured PDF text
+    # =============================================
+
+    unit_price    = None
+    delivery_days = None
+    payment_terms = None
+
+    # --- UNIT PRICE ---
+    # Match "Unit Price | 4200" or "Unit Price 4200" pattern from table
+    # Specifically looks for Unit Price column followed by the value
+    # Avoids Total Price, Grand Total, GST amounts
+    price_match = re.search(
+        r'Nos\s*[|]?\s*(\d{3,7})\s*[|]?\s*\d{6,}',  # Nos | 4200 | 63000000
+        text
+    )
+    if not price_match:
+        price_match = re.search(
+            r'Unit\s*Price\s*[|\s]+(\d{3,7})\b',      # Unit Price | 4200
+            text, re.IGNORECASE
+        )
+    if not price_match:
+        # Last resort: find price between unit column and a much larger total
+        price_match = re.search(
+            r'\bNos\b[^\d]*(\d{3,6})\b',              # after "Nos"
+            text, re.IGNORECASE
+        )
+    if price_match:
+        unit_price = float(price_match.group(1))
+
+    # --- DELIVERY ---
+    # Match "Delivery | 21 days from the receipt of PO"
+    delivery_match = re.search(
+        r'Delivery\s*[|\:]\s*([^\n|]+)',
+        text, re.IGNORECASE
+    )
+    if delivery_match:
+        delivery_days = delivery_match.group(1).strip()
+
+    # --- PAYMENT TERMS ---
+    # Match "Payment Terms | 100% payment against Proforma Invoice"
+    payment_match = re.search(
+        r'Payment\s*Terms?\s*[|\:]\s*([^\n|]+)',
+        text, re.IGNORECASE
+    )
+    if payment_match:
+        payment_terms = payment_match.group(1).strip()
+
+    # If all 3 found by regex, return immediately — no need for AI
+    if unit_price and delivery_days and payment_terms:
+        print(f"✅ Regex extracted — Price: {unit_price} | Delivery: {delivery_days} | Payment: {payment_terms}")
+        return {
+            "unit_price": unit_price,
+            "delivery_days": delivery_days,
+            "payment_terms": payment_terms
+        }
+
+    # =============================================
+    # STEP 2: AI EXTRACTION (fallback)
+    # Only runs if regex missed something
+    # =============================================
+
+    print("Regex incomplete — trying AI extraction...")
 
     prompt = f"""
-You are a procurement assistant extracting data from a vendor quotation.
-The text below may come from an email body, a PDF quotation, or both.
+You are extracting data from a vendor quotation document.
 
-Extract ONLY these 3 fields:
+The document has a table with these columns:
+Sl No | Material | Product Description | QTY | Unit | Unit Price | Total Price
 
-1. unit_price
-   - Look for: Unit Price, Rate, Price Per Unit, Per Piece, Per Nos
-   - Extract the PER UNIT price only (not total price, not grand total)
-   - Return numeric value only, no currency symbol
-   - Example: 4200
+And a terms section like:
+Payment Terms | 100% payment against Proforma Invoice  
+Delivery | 21 days from the receipt of PO
 
-2. delivery_days
-   - Look for: Delivery, Lead Time, Delivery Period, Dispatch
-   - Return as a string
-   - Example: "21 days from receipt of PO", "4 weeks", "immediate"
+Extract exactly these 3 fields and return ONLY valid JSON:
 
-3. payment_terms
-   - Look for: Payment Terms, Payment Conditions
-   - Return as a string
-   - Example: "100% payment against Proforma Invoice", "30 days credit"
-
-Rules:
-- Return ONLY valid JSON, no extra text, no markdown
-- If a field is not found return null
-- Do NOT return total price or grand total as unit_price
-- The unit price is typically in the "Unit Price" column of a table
-
-Example output:
 {{
-    "unit_price": 4200,
-    "delivery_days": "21 days from receipt of PO",
-    "payment_terms": "100% payment against Proforma Invoice"
+    "unit_price": <number from Unit Price column, NOT Total Price or Grand Total>,
+    "delivery_days": "<full delivery string>",
+    "payment_terms": "<full payment terms string>"
 }}
 
-Quotation Text:
-{text}
+Rules:
+- unit_price is the small per-unit number (like 4200), NOT the large total (like 63000000)
+- If not found return null for that field
+- Return JSON only, no markdown, no explanation
+
+Already extracted by regex (null means not found yet):
+unit_price: {unit_price}
+delivery_days: {delivery_days}
+payment_terms: {payment_terms}
+
+Document:
+{text[:3000]}
 """
 
     try:
@@ -232,16 +361,25 @@ Quotation Text:
         )
 
         text_response = response.content[0].text.strip()
-
-        # Strip markdown fences if present
         text_response = re.sub(r"```json|```", "", text_response).strip()
 
         json_match = re.search(r"\{.*\}", text_response, re.DOTALL)
         if json_match:
-            return json.loads(json_match.group())
+            ai_data = json.loads(json_match.group())
 
-        return {}
+            # Only fill in what regex missed
+            if not unit_price and ai_data.get("unit_price"):
+                unit_price = float(ai_data["unit_price"])
+            if not delivery_days and ai_data.get("delivery_days"):
+                delivery_days = ai_data["delivery_days"]
+            if not payment_terms and ai_data.get("payment_terms"):
+                payment_terms = ai_data["payment_terms"]
 
     except Exception as e:
-        print("Claude extraction failed:", e)
-        return {}
+        print(f"AI extraction failed: {e}")
+
+    return {
+        "unit_price": unit_price,
+        "delivery_days": delivery_days,
+        "payment_terms": payment_terms
+    }
