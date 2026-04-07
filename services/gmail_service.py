@@ -1648,9 +1648,198 @@
 #         print("❌ ERROR:", str(e))
 #         raise e
 
+# import re
+# import imaplib
+# import email
+# import streamlit as st
+
+# from services.db import get_cursor
+# from services.ai_extractor import extract_vendor_quote
+
+
+# # =====================================
+# # GMAIL CONNECTION (IMAP)
+# # =====================================
+
+# def get_gmail_connection():
+#     EMAIL = st.secrets["SENDER_EMAIL"]
+#     APP_PASSWORD = st.secrets["APP_PASSWORD"]
+
+#     mail = imaplib.IMAP4_SSL("imap.gmail.com")
+#     mail.login(SENDER_EMAIL, APP_PASSWORD)
+#     return mail
+
+
+# # =====================================
+# # SAVE VENDOR QUOTE
+# # =====================================
+
+# def save_quote(rfq_id, sender_email, body):
+
+#     sender_email = sender_email.strip().lower()
+
+#     conn, cursor = get_cursor()
+
+#     try:
+#         # Check vendor is part of this RFQ
+#         cursor.execute("""
+#             SELECT status FROM vendor_quotes
+#             WHERE rfq_id=%s AND LOWER(vendor_email)=%s
+#         """, (rfq_id, sender_email))
+
+#         row = cursor.fetchone()
+
+#         if not row:
+#             print(f"Vendor {sender_email} not found in RFQ {rfq_id}")
+#             return
+
+#         if row["status"] == "Quote Received":
+#             print(f"Quote from {sender_email} for RFQ {rfq_id} already processed")
+#             return
+
+#         print(f"\n====== EMAIL BODY — RFQ {rfq_id} from {sender_email} ======")
+#         print(body[:500])
+#         print("============================================================")
+
+#         # ======================
+#         # AI EXTRACTION
+#         # ======================
+#         ai_data = extract_vendor_quote(body)
+#         print("AI Extracted:", ai_data)
+
+#         unit_price   = ai_data.get("unit_price")
+#         delivery_days = ai_data.get("delivery_days")
+#         payment_terms = ai_data.get("payment_terms")
+
+#         # ======================
+#         # FALLBACK REGEX
+#         # ======================
+#         clean_body = body.replace(",", "").replace("\n", " ")
+
+#         if not unit_price:
+#             price_match = re.search(
+#                 r'(?:rs\.?|inr|₹)?\s*(\d{3,7})', clean_body, re.IGNORECASE
+#             )
+#             if price_match:
+#                 unit_price = float(price_match.group(1))
+
+#         if not delivery_days:
+#             delivery_match = re.search(
+#                 r'(\d+)\s*(day|days|week|weeks)', clean_body, re.IGNORECASE
+#             )
+#             if delivery_match:
+#                 delivery_days = delivery_match.group(0)
+
+#         if not payment_terms:
+#             payment_match = re.search(
+#                 r'(advance|credit|payment\s*\d+\s*days)', clean_body, re.IGNORECASE
+#             )
+#             if payment_match:
+#                 payment_terms = payment_match.group(0)
+
+#         print("Final — Price:", unit_price, "| Delivery:", delivery_days, "| Payment:", payment_terms)
+
+#         # ======================
+#         # SAVE TO DATABASE
+#         # ======================
+#         cursor.execute("""
+#             UPDATE vendor_quotes
+#             SET
+#                 unit_price          = %s,
+#                 delivery_time       = %s,
+#                 payment_terms       = %s,
+#                 raw_email           = %s,
+#                 email_received_date = CURRENT_TIMESTAMP,
+#                 status              = 'Quote Received'
+#             WHERE rfq_id = %s AND LOWER(vendor_email) = %s
+#         """, (
+#             unit_price,
+#             delivery_days,
+#             payment_terms,
+#             body,
+#             rfq_id,
+#             sender_email
+#         ))
+
+#         conn.commit()
+#         print(f"✅ Quote stored for RFQ {rfq_id} from {sender_email}")
+
+#     except Exception as e:
+#         print(f"❌ Error saving quote: {e}")
+#         conn.rollback()
+#         raise e
+
+#     finally:
+#         conn.close()
+
+
+# # =====================================
+# # FETCH RFQ EMAIL REPLIES (IMAP)
+# # =====================================
+
+# def fetch_rfq_replies():
+
+#     print("Checking mailbox for RFQ replies...")
+
+#     mail = get_gmail_connection()
+
+#     try:
+#         mail.select("inbox")
+
+#         status, messages = mail.search(None, '(UNSEEN SUBJECT "RFQ")')
+#         email_ids = messages[0].split()
+#         print(f"Unread RFQ emails found: {len(email_ids)}")
+
+#         for num in email_ids:
+
+#             status, msg_data = mail.fetch(num, "(RFC822)")
+#             msg = email.message_from_bytes(msg_data[0][1])
+
+#             subject = msg.get("subject", "")
+#             sender  = msg.get("from", "")
+
+#             # Extract RFQ ID from subject
+#             rfq_match = re.search(r"RFQ[- ]?(\d+)", subject, re.IGNORECASE)
+#             if not rfq_match:
+#                 print(f"Skipping email — no RFQ ID in subject: {subject}")
+#                 continue
+
+#             rfq_id = int(rfq_match.group(1))
+
+#             # Extract sender email
+#             email_match = re.findall(r'<(.+?)>', sender)
+#             sender_email = email_match[0] if email_match else sender
+#             sender_email = sender_email.strip().lower()
+
+#             # Extract plain-text body
+#             body = ""
+#             if msg.is_multipart():
+#                 for part in msg.walk():
+#                     content_type = part.get_content_type()
+#                     disposition  = str(part.get("Content-Disposition", ""))
+#                     if content_type == "text/plain" and "attachment" not in disposition:
+#                         payload = part.get_payload(decode=True)
+#                         if payload:
+#                             body = payload.decode(errors="ignore")
+#                             break
+#             else:
+#                 payload = msg.get_payload(decode=True)
+#                 if payload:
+#                     body = payload.decode(errors="ignore")
+
+#             print(f"\n📩 Processing — RFQ {rfq_id} | Vendor: {sender_email}")
+#             save_quote(rfq_id, sender_email, body)
+
+#     finally:
+#         mail.logout()
+
+#     print("✅ Mailbox scan complete")
+
 import re
 import imaplib
 import email
+import pdfplumber
+import io
 import streamlit as st
 
 from services.db import get_cursor
@@ -1662,7 +1851,7 @@ from services.ai_extractor import extract_vendor_quote
 # =====================================
 
 def get_gmail_connection():
-    EMAIL = st.secrets["SENDER_EMAIL"]
+    EMAIL = st.secrets["EMAIL"]
     APP_PASSWORD = st.secrets["APP_PASSWORD"]
 
     mail = imaplib.IMAP4_SSL("imap.gmail.com")
@@ -1671,10 +1860,82 @@ def get_gmail_connection():
 
 
 # =====================================
+# EXTRACT TEXT FROM PDF BYTES
+# =====================================
+
+def extract_pdf_text(pdf_bytes):
+    text = ""
+    try:
+        with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
+            for page in pdf.pages:
+                page_text = page.extract_text()
+                if page_text:
+                    text += page_text + "\n"
+    except Exception as e:
+        print(f"PDF extraction failed: {e}")
+    return text
+
+
+# =====================================
+# EXTRACT FULL TEXT FROM EMAIL
+# (body + any PDF attachments)
+# =====================================
+
+def extract_email_text(msg):
+
+    body = ""
+    pdf_text = ""
+
+    if msg.is_multipart():
+        for part in msg.walk():
+            content_type = part.get_content_type()
+            disposition = str(part.get("Content-Disposition", ""))
+
+            # Plain text body
+            if content_type == "text/plain" and "attachment" not in disposition:
+                payload = part.get_payload(decode=True)
+                if payload:
+                    body = payload.decode(errors="ignore")
+
+            # PDF attachment
+            elif content_type == "application/pdf" or (
+                "attachment" in disposition and disposition.lower().endswith(".pdf")
+            ):
+                payload = part.get_payload(decode=True)
+                if payload:
+                    print("📎 PDF attachment found — extracting text...")
+                    pdf_text = extract_pdf_text(payload)
+                    print(f"PDF text extracted: {len(pdf_text)} characters")
+
+            # Some vendors send PDF with generic octet-stream content type
+            elif content_type == "application/octet-stream" and "attachment" in disposition:
+                filename = part.get_filename() or ""
+                if filename.lower().endswith(".pdf"):
+                    payload = part.get_payload(decode=True)
+                    if payload:
+                        print("📎 PDF attachment (octet-stream) found — extracting text...")
+                        pdf_text = extract_pdf_text(payload)
+
+    else:
+        payload = msg.get_payload(decode=True)
+        if payload:
+            body = payload.decode(errors="ignore")
+
+    # Combine body + PDF text for AI extraction
+    full_text = ""
+    if body:
+        full_text += f"EMAIL BODY:\n{body}\n\n"
+    if pdf_text:
+        full_text += f"PDF ATTACHMENT:\n{pdf_text}\n"
+
+    return full_text, body, pdf_text
+
+
+# =====================================
 # SAVE VENDOR QUOTE
 # =====================================
 
-def save_quote(rfq_id, sender_email, body):
+def save_quote(rfq_id, sender_email, full_text, raw_body):
 
     sender_email = sender_email.strip().lower()
 
@@ -1697,42 +1958,42 @@ def save_quote(rfq_id, sender_email, body):
             print(f"Quote from {sender_email} for RFQ {rfq_id} already processed")
             return
 
-        print(f"\n====== EMAIL BODY — RFQ {rfq_id} from {sender_email} ======")
-        print(body[:500])
-        print("============================================================")
+        print(f"\n====== PROCESSING RFQ {rfq_id} from {sender_email} ======")
+        print(f"Total text length: {len(full_text)} characters")
 
         # ======================
         # AI EXTRACTION
+        # (uses combined body + PDF text)
         # ======================
-        ai_data = extract_vendor_quote(body)
+        ai_data = extract_vendor_quote(full_text)
         print("AI Extracted:", ai_data)
 
-        unit_price   = ai_data.get("unit_price")
+        unit_price    = ai_data.get("unit_price")
         delivery_days = ai_data.get("delivery_days")
         payment_terms = ai_data.get("payment_terms")
 
         # ======================
         # FALLBACK REGEX
         # ======================
-        clean_body = body.replace(",", "").replace("\n", " ")
+        clean_text = full_text.replace(",", "").replace("\n", " ")
 
         if not unit_price:
             price_match = re.search(
-                r'(?:rs\.?|inr|₹)?\s*(\d{3,7})', clean_body, re.IGNORECASE
+                r'(?:rs\.?|inr|₹)?\s*(\d{3,7})', clean_text, re.IGNORECASE
             )
             if price_match:
                 unit_price = float(price_match.group(1))
 
         if not delivery_days:
             delivery_match = re.search(
-                r'(\d+)\s*(day|days|week|weeks)', clean_body, re.IGNORECASE
+                r'(\d+)\s*(day|days|week|weeks)', clean_text, re.IGNORECASE
             )
             if delivery_match:
                 delivery_days = delivery_match.group(0)
 
         if not payment_terms:
             payment_match = re.search(
-                r'(advance|credit|payment\s*\d+\s*days)', clean_body, re.IGNORECASE
+                r'(advance|credit|payment\s*\d+\s*days)', clean_text, re.IGNORECASE
             )
             if payment_match:
                 payment_terms = payment_match.group(0)
@@ -1756,7 +2017,7 @@ def save_quote(rfq_id, sender_email, body):
             unit_price,
             delivery_days,
             payment_terms,
-            body,
+            raw_body,
             rfq_id,
             sender_email
         ))
@@ -1801,7 +2062,7 @@ def fetch_rfq_replies():
             # Extract RFQ ID from subject
             rfq_match = re.search(r"RFQ[- ]?(\d+)", subject, re.IGNORECASE)
             if not rfq_match:
-                print(f"Skipping email — no RFQ ID in subject: {subject}")
+                print(f"Skipping — no RFQ ID in subject: {subject}")
                 continue
 
             rfq_id = int(rfq_match.group(1))
@@ -1811,24 +2072,15 @@ def fetch_rfq_replies():
             sender_email = email_match[0] if email_match else sender
             sender_email = sender_email.strip().lower()
 
-            # Extract plain-text body
-            body = ""
-            if msg.is_multipart():
-                for part in msg.walk():
-                    content_type = part.get_content_type()
-                    disposition  = str(part.get("Content-Disposition", ""))
-                    if content_type == "text/plain" and "attachment" not in disposition:
-                        payload = part.get_payload(decode=True)
-                        if payload:
-                            body = payload.decode(errors="ignore")
-                            break
-            else:
-                payload = msg.get_payload(decode=True)
-                if payload:
-                    body = payload.decode(errors="ignore")
-
             print(f"\n📩 Processing — RFQ {rfq_id} | Vendor: {sender_email}")
-            save_quote(rfq_id, sender_email, body)
+
+            # Extract body + PDF text
+            full_text, raw_body, pdf_text = extract_email_text(msg)
+
+            if pdf_text:
+                print("✅ PDF content included in AI extraction")
+
+            save_quote(rfq_id, sender_email, full_text, raw_body)
 
     finally:
         mail.logout()
