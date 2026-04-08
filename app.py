@@ -1560,45 +1560,811 @@
 #     dashboard()
 
 
+# import streamlit as st
+# import pandas as pd
+# from pathlib import Path
+# from services.db import get_connection, get_cursor
+# from services.email_service import send_rfq_email, send_approval_email
+
+# # =========================
+# # PAGE CONFIG — MUST BE FIRST
+# # =========================
+# st.set_page_config(page_title="Procurement System", layout="wide")
+
+# # Read query params after set_page_config
+# query_params = st.query_params
+# page = query_params.get("page")
+
+
+# # =========================
+# # SESSION INIT
+# # =========================
+
+# if "logged_in" not in st.session_state:
+#     st.session_state.logged_in = False
+
+# if "active_project_id" not in st.session_state:
+#     st.session_state.active_project_id = None
+
+
+# # =========================
+# # LOAD FILES
+# # =========================
+
+# def load_boq():
+#     path = Path("data/Design_boq.xlsx")
+#     if not path.exists():
+#         return None
+#     return pd.read_excel(path)
+
+
+# def load_vendor_data():
+#     path = Path("data/past_vendor_data.xlsx")
+#     if not path.exists():
+#         return None
+#     df = pd.read_excel(path)
+#     df.columns = df.columns.str.strip()
+#     return df
+
+
+# # =========================
+# # LOGIN PAGE
+# # =========================
+
+# def login_page():
+
+#     st.title("🔐 Procurement Login")
+
+#     username = st.text_input("Username")
+#     password = st.text_input("Password", type="password")
+
+#     if st.button("Login"):
+#         conn, cursor = get_cursor()
+#         cursor.execute(
+#             "SELECT * FROM users WHERE username=%s AND password=%s",
+#             (username, password)
+#         )
+#         user = cursor.fetchone()
+#         conn.close()
+
+#         if user:
+#             st.session_state.logged_in = True
+#             st.success("Login successful")
+#             st.rerun()
+#         else:
+#             st.error("Invalid credentials")
+
+
+# # =========================
+# # PROJECT SECTION
+# # =========================
+
+# def project_section():
+
+#     st.subheader("📂 Select Project from Design BOQ")
+
+#     boq_df = load_boq()
+
+#     if boq_df is None:
+#         st.error("BOQ file not found at data/Design_boq.xlsx")
+#         return
+
+#     unique_projects = boq_df["Project_ID"].dropna().unique()
+
+#     selected_project_code = st.selectbox("Select Project ID", unique_projects)
+#     st.session_state["selected_project_code"] = selected_project_code
+
+#     if selected_project_code:
+#         conn, cursor = get_cursor()
+
+#         cursor.execute(
+#             "SELECT * FROM projects WHERE project_id=%s",
+#             (selected_project_code,)
+#         )
+#         existing = cursor.fetchone()
+
+#         if not existing:
+#             cursor.execute(
+#                 "INSERT INTO projects (project_id, project_name) VALUES (%s, %s)",
+#                 (selected_project_code, selected_project_code)
+#             )
+#             conn.commit()
+
+#         cursor.execute(
+#             "SELECT id FROM projects WHERE project_id=%s",
+#             (selected_project_code,)
+#         )
+#         project_id = cursor.fetchone()["id"]
+#         conn.close()
+
+#         st.session_state.active_project_id = project_id
+#         st.session_state.project_sheet_id = selected_project_code
+#         st.success(f"Project {selected_project_code} ready for procurement")
+
+
+# # =========================
+# # MATERIAL SECTION
+# # =========================
+
+# def material_section():
+
+#     selected_project_code = st.session_state.get("selected_project_code")
+
+#     if not st.session_state.active_project_id:
+#         st.warning("Please select a project first.")
+#         return
+
+#     st.subheader("📐 Materials From BOQ")
+
+#     boq_df = load_boq()
+
+#     project_materials = boq_df[boq_df["Project_ID"] == selected_project_code]
+
+#     if project_materials.empty:
+#         st.info("No materials found for this project.")
+#         return
+
+#     material_names = project_materials["Material_Name"].unique()
+#     selected_material = st.selectbox("Select Material", material_names)
+
+#     if not selected_material:
+#         return
+
+#     material_row = project_materials[
+#         project_materials["Material_Name"] == selected_material
+#     ].iloc[0]
+
+#     quantity = material_row["BOQ_Quantity"]
+#     uom = material_row["uom"]
+#     specification = material_row["Specification"]
+
+#     st.markdown("### Material Details")
+#     st.write(f"**Material:** {selected_material}")
+#     st.write(f"**Quantity:** {quantity} {uom}")
+#     st.write(f"**Specification:** {specification}")
+
+#     st.markdown("### 📊 Past Vendor History")
+
+#     vendor_df = load_vendor_data()
+
+#     if vendor_df is None:
+#         st.warning("Past vendor data file not found at data/past_vendor_data.xlsx")
+#         return
+
+#     vendor_df["Material_Name"] = vendor_df["Material_Name"].str.strip().str.lower()
+#     selected_material_clean = selected_material.strip().lower()
+
+#     filtered_vendors = vendor_df[
+#         vendor_df["Material_Name"] == selected_material_clean
+#     ].copy()
+
+#     if filtered_vendors.empty:
+#         st.warning("No past vendor history found for this material.")
+#         return
+
+#     filtered_vendors["Select"] = False
+
+#     edited_df = st.data_editor(filtered_vendors, use_container_width=True)
+
+#     # =========================
+#     # SEND RFQ
+#     # =========================
+
+#     if st.button("📤 Send RFQ"):
+
+#         selected_rows = edited_df[edited_df["Select"] == True]
+
+#         if selected_rows.empty:
+#             st.warning("Select at least one vendor.")
+#             return
+
+#         conn, cursor = get_cursor()
+
+#         cursor.execute(
+#             """
+#             INSERT INTO rfq_master
+#                 (project_id, material_name, quantity, uom, specification, rfq_date, status)
+#             VALUES (%s, %s, %s, %s, %s, CURRENT_TIMESTAMP, %s)
+#             """,
+#             (
+#                 st.session_state.active_project_id,
+#                 selected_material,
+#                 float(quantity),
+#                 str(uom),
+#                 str(specification),
+#                 "Sent"
+#             )
+#         )
+#         cursor.execute("SELECT lastval() AS rfq_id")
+#         rfq_id = cursor.fetchone()["rfq_id"]
+
+#         for _, row in selected_rows.iterrows():
+#             vendor_name = row["Vendor_Name"]
+#             vendor_email = row["Email"]
+
+#             email_sent = send_rfq_email(
+#                 vendor_email,
+#                 vendor_name,
+#                 selected_material,
+#                 quantity,
+#                 uom,
+#                 specification,
+#                 rfq_id,
+#                 st.session_state.project_sheet_id
+#             )
+
+#             if email_sent:
+#                 st.success(f"✅ RFQ sent to {vendor_name}")
+#             else:
+#                 st.error(f"❌ Failed to send email to {vendor_name}")
+
+#             cursor.execute(
+#                 """
+#                 INSERT INTO vendor_quotes
+#                     (rfq_id, vendor_name, vendor_email, status)
+#                 VALUES (%s, %s, %s, %s)
+#                 """,
+#                 (rfq_id, vendor_name, vendor_email, "RFQ Sent")
+#             )
+
+#         conn.commit()
+#         conn.close()
+#         st.success("RFQ process completed.")
+
+
+# # =========================
+# # RFQ TRACKING
+# # =========================
+
+# def rfq_tracking_section():
+
+#     st.title("📊 RFQ Tracking")
+
+#     if st.button("📩 Fetch Vendor Replies"):
+#         try:
+#             with st.spinner("Reading vendor emails..."):
+#                 from services.gmail_service import fetch_rfq_replies
+#                 fetch_rfq_replies()
+#             st.success("Vendor replies processed successfully")
+#         except Exception as e:
+#             st.error(f"Error fetching replies: {e}")
+
+#     conn, cursor = get_cursor()
+
+#     cursor.execute("SELECT id, project_id FROM projects ORDER BY id DESC")
+#     projects = cursor.fetchall()
+
+#     if not projects:
+#         st.info("No projects found.")
+#         conn.close()
+#         return
+
+#     project_dict = {p["project_id"]: p["id"] for p in projects}
+#     selected_project = st.selectbox("Select Project", list(project_dict.keys()))
+#     selected_project_id = project_dict[selected_project]
+
+#     cursor.execute("""
+#         SELECT
+#             rm.rfq_id        AS "RFQ ID",
+#             rm.material_name AS "Material",
+#             rm.status        AS "RFQ Status",
+#             rv.vendor_name   AS "Vendor",
+#             rv.status        AS "Vendor Status",
+#             rm.approval_status  AS "Approval Status"
+#         FROM rfq_master rm
+#         LEFT JOIN vendor_quotes rv ON rm.rfq_id = rv.rfq_id
+#         WHERE rm.project_id = %s
+#         ORDER BY rm.rfq_id DESC
+#     """, (selected_project_id,))
+
+#     rows = cursor.fetchall()
+#     conn.close()
+
+#     if not rows:
+#         st.warning("No RFQs found for this project.")
+#         return
+
+#     st.dataframe(pd.DataFrame(rows), use_container_width=True)
+
+
+# # =========================
+# # QUOTE COMPARISON
+# # =========================
+
+# def comparison_section():
+
+#     st.title("📊 Vendor Quote Comparison")
+
+#     conn, cursor = get_cursor()
+
+#     cursor.execute("SELECT id, project_id FROM projects ORDER BY id DESC")
+#     projects = cursor.fetchall()
+
+#     if not projects:
+#         st.warning("No projects found.")
+#         conn.close()
+#         return
+
+#     project_dict = {p["project_id"]: p["id"] for p in projects}
+#     selected_project = st.selectbox("Select Project", list(project_dict.keys()))
+#     selected_project_id = project_dict[selected_project]
+
+#     cursor.execute(
+#         "SELECT DISTINCT material_name FROM rfq_master WHERE project_id=%s",
+#         (selected_project_id,)
+#     )
+#     materials = cursor.fetchall()
+
+#     if not materials:
+#         st.warning("No materials found for this project.")
+#         conn.close()
+#         return
+
+#     material_list = [m["material_name"] for m in materials]
+#     selected_material = st.selectbox("Select Material", material_list)
+
+#     cursor.execute("""
+#         SELECT
+#             vq.rfq_id,
+#             vq.vendor_name,
+#             vq.unit_price,
+#             vq.delivery_time,
+#             vq.payment_terms
+#         FROM vendor_quotes vq
+#         WHERE vq.rfq_id IN (
+#             SELECT rfq_id FROM rfq_master
+#             WHERE project_id = %s
+#             AND LOWER(TRIM(material_name)) = LOWER(TRIM(%s))
+#         )
+#     """, (selected_project_id, selected_material))
+
+#     rows = cursor.fetchall()
+#     conn.close()
+
+#     if not rows:
+#         st.warning("No quotes received yet for this material.")
+#         return
+
+#     df = pd.DataFrame([dict(r) for r in rows])
+#     df.columns = ["RFQ ID", "Vendor", "Unit Price", "Delivery Time", "Payment Terms"]
+#     df["Unit Price"] = pd.to_numeric(df["Unit Price"], errors="coerce")
+#     df["Select Vendor"] = False
+
+#     # Highlight best price
+#     if df["Unit Price"].notna().any():
+#         best_idx = df["Unit Price"].idxmin()
+#         best_vendor = df.loc[best_idx]
+#         st.success(f"💰 Lowest Quote: **{best_vendor['Vendor']}** at ₹ {best_vendor['Unit Price']:,.2f}")
+
+#     edited_df = st.data_editor(
+#         df,
+#         use_container_width=True,
+#         column_config={
+#             "RFQ ID": st.column_config.Column(disabled=True),
+#             "Vendor": st.column_config.Column(disabled=True),
+#             "Unit Price": st.column_config.NumberColumn(format="₹%.2f"),
+#             "Delivery Time": st.column_config.TextColumn(),
+#             "Payment Terms": st.column_config.TextColumn(),
+#             "Select Vendor": st.column_config.CheckboxColumn("Select"),
+#         },
+#         num_rows="fixed"
+#     )
+
+#     col1, col2 = st.columns(2)
+
+#     with col1:
+#         if st.button("💾 Save Edited Quotes"):
+#             conn, cursor = get_cursor()
+#             for _, row in edited_df.iterrows():
+#                 cursor.execute("""
+#                     UPDATE vendor_quotes
+#                     SET unit_price = %s, delivery_time = %s, payment_terms = %s
+#                     WHERE rfq_id = %s AND vendor_name = %s
+#                 """, (
+#                     row["Unit Price"],
+#                     row["Delivery Time"],
+#                     row["Payment Terms"],
+#                     row["RFQ ID"],
+#                     row["Vendor"]
+#                 ))
+#             conn.commit()
+#             conn.close()
+#             st.success("Quotes updated successfully")
+
+#     with col2:
+#         # if st.button("📤 Send Selected Vendor for Approval"):
+
+#         #     selected_rows = edited_df[edited_df["Select Vendor"] == True]
+
+#         #     if selected_rows.empty:
+#         #         st.warning("Please select a vendor first.")
+#         #         return
+
+#         #     if len(selected_rows) > 1:
+#         #         st.warning("Please select only one vendor for approval.")
+#         #         return
+
+#         #     vendor_row = selected_rows.iloc[0]
+
+#         #     conn, cursor = get_cursor()
+
+#         #     # Check for duplicate pending approval
+#         #     cursor.execute("""
+#         #         SELECT id FROM vendor_approvals
+#         #         WHERE project_id=%s AND material_name=%s AND vendor_name=%s AND status='Pending'
+#         #     """, (selected_project_id, selected_material, vendor_row["Vendor"]))
+
+#         #     existing = cursor.fetchone()
+
+#         #     if existing:
+#         #         st.warning("Approval request already sent for this vendor.")
+#         #         conn.close()
+#         #         return
+
+#         #     cursor.execute("""
+#         #         INSERT INTO vendor_approvals
+#         #             (project_id, material_name, vendor_name, unit_price,
+#         #              delivery_time, payment_terms, status)
+#         #         VALUES (%s, %s, %s, %s, %s, %s, %s)
+#         #     """, (
+#         #         int(selected_project_id),
+#         #         selected_material,
+#         #         vendor_row["Vendor"],
+#         #         vendor_row["Unit Price"],
+#         #         vendor_row["Delivery Time"],
+#         #         vendor_row["Payment Terms"],
+#         #         "Pending"
+#         #     ))
+
+#         #     cursor.execute("""
+#         #         UPDATE rfq_master
+#         #         SET approval_status = 'Pending'
+#         #         WHERE project_id=%s AND LOWER(TRIM(material_name)) = LOWER(TRIM(%s))
+#         #     """, (selected_project_id, selected_material))
+
+#         #     conn.commit()
+#         #     conn.close()
+
+#         #     # Send email — pass project_id integer, material name, vendor name, price
+#         #     send_approval_email(
+#         #         selected_project_id,
+#         #         selected_material,
+#         #         vendor_row["Vendor"],
+#         #         vendor_row["Unit Price"]
+#         #     )
+
+#         #     st.success(f"✅ {vendor_row['Vendor']} sent to manager for approval.")
+#         if st.button("📤 Send Selected Vendor for Approval"):
+
+#             selected_rows = edited_df[edited_df["Select Vendor"] == True]
+
+#             if selected_rows.empty:
+#                 st.warning("Please select a vendor first.")
+#                 return
+
+#             # if len(selected_rows) > 1:
+#             #     st.warning("Please select only one vendor for approval.")
+#             #     return
+
+#             vendor_row = selected_rows.iloc[0]
+
+#             conn, cursor = get_cursor()
+
+#             try:
+#                 cursor.execute("""
+#                     SELECT id FROM vendor_approvals
+#                     WHERE project_id=%s AND material_name=%s AND vendor_name=%s AND status='Pending'
+#                 """, (selected_project_id, selected_material, vendor_row["Vendor"]))
+
+#                 existing = cursor.fetchone()
+
+#                 if existing:
+#                     st.warning("Approval request already sent for this vendor.")
+#                     conn.close()
+#                     return
+
+#                 cursor.execute("""
+#                     INSERT INTO vendor_approvals
+#                         (project_id, material_name, vendor_name, unit_price,
+#                          delivery_time, payment_terms, status)
+#                     VALUES (%s, %s, %s, %s, %s, %s, %s)
+#                 """, (
+#                     selected_project_id,
+#                     selected_material,
+#                     vendor_row["Vendor"],
+#                     float(vendor_row["Unit Price"]),
+#                     vendor_row["Delivery Time"],
+#                     vendor_row["Payment Terms"],
+#                     "Pending"
+#                 ))
+
+#                 cursor.execute("""
+#                     UPDATE rfq_master
+#                     SET approval_status = 'Pending'
+#                     WHERE project_id=%s AND LOWER(TRIM(material_name)) = LOWER(TRIM(%s))
+#                 """, (selected_project_id, selected_material))
+
+#                 conn.commit()
+#                 conn.close()
+
+#                 send_approval_email(
+#                     selected_project_id,
+#                     selected_material,
+#                     vendor_row["Vendor"],
+#                     vendor_row["Unit Price"]
+#                 )
+
+#                 st.success(f"✅ {vendor_row['Vendor']} sent to manager for approval.")
+
+#             except Exception as e:
+#                 conn.rollback()
+#                 conn.close()
+#                 st.error("Error details:")
+#                 st.exception(e)
+
+# # =========================
+# # MANAGER APPROVAL
+# # =========================
+
+# def manager_approval_section():
+
+#     st.title("🧾 Manager Vendor Approvals")
+
+#     conn, cursor = get_cursor()
+
+#     cursor.execute("""
+#         SELECT id, project_id, material_name, vendor_name,
+#                unit_price, delivery_time, payment_terms
+#         FROM vendor_approvals
+#         WHERE status = 'Pending'
+#         ORDER BY id DESC
+#     """)
+
+#     approvals = cursor.fetchall()
+
+#     if not approvals:
+#         st.info("No approvals pending.")
+#         conn.close()
+#         return
+
+#     for row in approvals:
+#         with st.expander(f"Project: {row['project_id']} | Material: {row['material_name']}"):
+#             st.write(f"**Vendor:** {row['vendor_name']}")
+#             st.write(f"**Unit Price:** ₹ {row['unit_price']}")
+#             st.write(f"**Delivery:** {row['delivery_time']}")
+#             st.write(f"**Payment Terms:** {row['payment_terms']}")
+
+#             col1, col2 = st.columns(2)
+
+#             with col1:
+#                 if st.button(f"✅ Approve", key=f"approve_{row['id']}"):
+#                     conn2, cursor2 = get_cursor()
+#                     # cursor2.execute(
+#                     #     "UPDATE vendor_approvals SET status='Approved' WHERE id=%s",
+#                     #     (row["id"],)
+#                     # )
+#                     # cursor2.execute("""
+#                     #     UPDATE rfq_master SET status='Vendor Approved'
+#                     #     WHERE project_id=%s AND LOWER(TRIM(material_name))=LOWER(TRIM(%s))
+#                     # """, (row["project_id"], row["material_name"]))
+
+#                     cursor2.execute(
+#                         "UPDATE vendor_approvals SET status='Approved' WHERE id=%s",
+#                         (row["id"],)
+#                     )
+#                     cursor2.execute("""
+#                         UPDATE rfq_master SET status='Vendor Approved', approval_status='Approved'
+#                         WHERE project_id=%s AND LOWER(TRIM(material_name))=LOWER(TRIM(%s))
+#                     """, (row["project_id"], row["material_name"]))
+
+#                     conn2.commit()
+#                     conn2.close()
+#                     st.success("Vendor Approved ✅")
+#                     st.rerun()
+
+#             with col2:
+#                 if st.button(f"❌ Reject", key=f"reject_{row['id']}"):
+#                     conn2, cursor2 = get_cursor()
+#                     # cursor2.execute(
+#                     #     "UPDATE vendor_approvals SET status='Rejected' WHERE id=%s",
+#                     #     (row["id"],)
+#                     # )
+#                     # cursor2.execute("""
+#                     #     UPDATE rfq_master SET status='Vendor Rejected'
+#                     #     WHERE project_id=%s AND LOWER(TRIM(material_name))=LOWER(TRIM(%s))
+#                     # """, (row["project_id"], row["material_name"]))
+#                     # conn2.commit()
+#                     cursor2.execute(
+#                         "UPDATE vendor_approvals SET status='Rejected' WHERE id=%s",
+#                        (row["id"],)
+#                     )
+#                     cursor2.execute("""
+#                         UPDATE rfq_master SET status='Vendor Rejected', approval_status='Rejected'
+#                         WHERE project_id=%s AND LOWER(TRIM(material_name))=LOWER(TRIM(%s))
+#                     """, (row["project_id"], row["material_name"]))
+
+#                     conn2.close()
+#                     st.success("Vendor Rejected")
+#                     st.rerun()
+
+#     conn.close()
+
+
+# # =========================
+# # COSTING SECTION
+# # =========================
+
+# def costing_section():
+
+#     st.title("💰 Project Costing")
+
+#     conn, cursor = get_cursor()
+
+#     cursor.execute("SELECT id, project_id FROM projects ORDER BY id DESC")
+#     projects = cursor.fetchall()
+
+#     if not projects:
+#         st.warning("No projects found.")
+#         conn.close()
+#         return
+
+#     project_dict = {p["project_id"]: p["id"] for p in projects}
+#     selected_project = st.selectbox("Select Project", list(project_dict.keys()))
+#     selected_project_id = project_dict[selected_project]
+
+#     cursor.execute("""
+#         SELECT
+#             rm.material_name,
+#             rm.quantity,
+#             rm.uom,
+#             va.vendor_name,
+#             va.unit_price
+#         FROM vendor_approvals va
+#         JOIN rfq_master rm
+#             ON rm.project_id = va.project_id
+#             AND LOWER(TRIM(rm.material_name)) = LOWER(TRIM(va.material_name))
+#         WHERE va.project_id = %s AND va.status = 'Approved'
+#         ORDER BY rm.material_name
+#     """, (selected_project_id,))
+
+#     rows = cursor.fetchall()
+#     conn.close()
+
+#     if not rows:
+#         st.warning("No approved vendors found for this project.")
+#         return
+
+#     df = pd.DataFrame([dict(r) for r in rows])
+#     df.columns = ["Material", "Quantity", "UOM", "Vendor", "Unit Price"]
+#     df["Unit Price"] = pd.to_numeric(df["Unit Price"], errors="coerce")
+#     df["Quantity"] = pd.to_numeric(df["Quantity"], errors="coerce")
+#     df["Total Cost"] = df["Quantity"] * df["Unit Price"]
+
+#     st.subheader("📊 Material-wise Costing")
+#     st.dataframe(
+#         df.style.format({"Unit Price": "₹{:,.2f}", "Total Cost": "₹{:,.2f}"}),
+#         use_container_width=True
+#     )
+
+#     st.markdown("---")
+#     total = df["Total Cost"].sum()
+#     st.success(f"💰 Total Project Cost: ₹ {total:,.2f}")
+
+
+# # =========================
+# # DASHBOARD
+# # =========================
+
+# def dashboard():
+
+#     st.sidebar.title("🏗️ Procurement System")
+#     menu = st.sidebar.radio(
+#         "Navigation",
+#         ["Projects", "Materials & RFQ", "RFQ Tracking",
+#          "Quote Comparison", "Manager Approval", "Costing"]
+#     )
+
+#     if menu == "Projects":
+#         project_section()
+#     elif menu == "Materials & RFQ":
+#         material_section()
+#     elif menu == "RFQ Tracking":
+#         rfq_tracking_section()
+#     elif menu == "Quote Comparison":
+#         comparison_section()
+#     elif menu == "Manager Approval":
+#         manager_approval_section()
+#     elif menu == "Costing":
+#         costing_section()
+
+#     if st.sidebar.button("🚪 Logout"):
+#         st.session_state.logged_in = False
+#         st.rerun()
+
+
+# # =========================
+# # APP ENTRY POINT
+# # =========================
+
+# if not st.session_state.logged_in:
+#     login_page()
+# else:
+#     dashboard()
+
+# New version #
+
 import streamlit as st
 import pandas as pd
 from pathlib import Path
-from services.db import get_connection, get_cursor
-from services.email_service import send_rfq_email, send_approval_email
+from services.db import get_cursor
+from services.email_service import (
+    send_rfq_email,
+    send_reverse_rfq_email,
+    send_approval_email,
+)
 
-# =========================
-# PAGE CONFIG — MUST BE FIRST
-# =========================
-st.set_page_config(page_title="Procurement System", layout="wide")
+# ─────────────────────────────────────────────────────────────
+# PAGE CONFIG — must be first Streamlit call
+# ─────────────────────────────────────────────────────────────
+st.set_page_config(
+    page_title="Procurement System",
+    layout="wide",
+    initial_sidebar_state="collapsed",
+)
 
-# Read query params after set_page_config
-query_params = st.query_params
-page = query_params.get("page")
+# ─────────────────────────────────────────────────────────────
+# GLOBAL CSS
+# ─────────────────────────────────────────────────────────────
+st.markdown("""
+<style>
+div[data-testid="stSidebar"] { display: none; }
+.block-container { padding: 2rem 3rem; }
+.section-card {
+    border: 1px solid rgba(0,0,0,0.08);
+    border-radius: 12px;
+    padding: 2rem;
+    margin-bottom: 1.5rem;
+    background: white;
+}
+.badge-sent     { background:#e3f2fd; color:#1565c0; padding:2px 10px; border-radius:20px; font-size:12px; }
+.badge-received { background:#e8f5e9; color:#2e7d32; padding:2px 10px; border-radius:20px; font-size:12px; }
+.badge-pending  { background:#fff3e0; color:#e65100; padding:2px 10px; border-radius:20px; font-size:12px; }
+.badge-approved { background:#e8f5e9; color:#2e7d32; padding:2px 10px; border-radius:20px; font-size:12px; }
+.badge-rejected { background:#ffebee; color:#c62828; padding:2px 10px; border-radius:20px; font-size:12px; }
+</style>
+""", unsafe_allow_html=True)
 
+# ─────────────────────────────────────────────────────────────
+# SESSION STATE
+# ─────────────────────────────────────────────────────────────
+def _init():
+    defaults = {
+        "section":           None,   # "procurement" | "design"
+        "logged_in":         False,
+        "active_project_id": None,
+        "project_sheet_id":  None,
+        "selected_project_code": None,
+        "page":              "projects",
+    }
+    for k, v in defaults.items():
+        if k not in st.session_state:
+            st.session_state[k] = v
 
-# =========================
-# SESSION INIT
-# =========================
+_init()
 
-if "logged_in" not in st.session_state:
-    st.session_state.logged_in = False
-
-if "active_project_id" not in st.session_state:
-    st.session_state.active_project_id = None
-
-
-# =========================
-# LOAD FILES
-# =========================
-
+# ─────────────────────────────────────────────────────────────
+# DATA LOADERS
+# ─────────────────────────────────────────────────────────────
 def load_boq():
     path = Path("data/Design_boq.xlsx")
     if not path.exists():
         return None
-    return pd.read_excel(path)
+    df = pd.read_excel(path)
+    df.columns = df.columns.str.strip()
+    return df
 
 
-def load_vendor_data():
+def load_vendor_history():
     path = Path("data/past_vendor_data.xlsx")
     if not path.exists():
         return None
@@ -1607,255 +2373,393 @@ def load_vendor_data():
     return df
 
 
-# =========================
-# LOGIN PAGE
-# =========================
+# ─────────────────────────────────────────────────────────────
+# ████████████  LANDING PAGE  ████████████
+# ─────────────────────────────────────────────────────────────
+def landing_page():
+    st.markdown("## 🏗️ Procurement Management System")
+    st.markdown("Select the section you want to access.")
+    st.markdown("---")
 
-def login_page():
+    col1, col2 = st.columns(2, gap="large")
 
-    st.title("🔐 Procurement Login")
-
-    username = st.text_input("Username")
-    password = st.text_input("Password", type="password")
-
-    if st.button("Login"):
-        conn, cursor = get_cursor()
-        cursor.execute(
-            "SELECT * FROM users WHERE username=%s AND password=%s",
-            (username, password)
-        )
-        user = cursor.fetchone()
-        conn.close()
-
-        if user:
-            st.session_state.logged_in = True
-            st.success("Login successful")
+    with col1:
+        st.markdown("### 📐 Design")
+        st.markdown("Upload BOQ excel files for new projects. Makes material data available to the procurement team.")
+        if st.button("Open Design Section", use_container_width=True):
+            st.session_state.section = "design"
             st.rerun()
-        else:
-            st.error("Invalid credentials")
+
+    with col2:
+        st.markdown("### 🛒 Procurement")
+        st.markdown("Manage vendor RFQs, compare quotes, and send for manager approval.")
+        if st.button("Open Procurement Section", use_container_width=True):
+            st.session_state.section = "procurement"
+            st.rerun()
 
 
-# =========================
-# PROJECT SECTION
-# =========================
+# ─────────────────────────────────────────────────────────────
+# ████████████  DESIGN SECTION  ████████████
+# ─────────────────────────────────────────────────────────────
+def design_section():
+    col_back, col_title = st.columns([1, 8])
+    with col_back:
+        if st.button("← Back"):
+            st.session_state.section = None
+            st.rerun()
+    with col_title:
+        st.markdown("## 📐 Design Section")
 
-def project_section():
+    st.markdown("Upload the Design BOQ Excel file for a project.")
+    st.info("The uploaded file will be saved as `data/Design_boq.xlsx` and used by the procurement team.")
 
-    st.subheader("📂 Select Project from Design BOQ")
+    # Show current BOQ if it exists
+    boq_df = load_boq()
+    if boq_df is not None:
+        st.markdown("### Current BOQ File")
+        st.dataframe(boq_df, use_container_width=True)
+        st.markdown(f"**Projects in BOQ:** {', '.join(boq_df['Project_ID'].dropna().unique().astype(str))}")
+        st.markdown("---")
+
+    st.markdown("### Upload New BOQ File")
+    st.markdown("""
+    **Required Excel columns:**
+    - `Project_ID` — unique project identifier
+    - `Material_Name` — name of the material
+    - `BOQ_Quantity` — quantity required
+    - `uom` — unit of measure (Nos, kg, m, etc.)
+    - `Specification` — technical specification
+    """)
+
+    uploaded = st.file_uploader("Upload BOQ Excel (.xlsx)", type=["xlsx"])
+
+    if uploaded:
+        try:
+            df = pd.read_excel(uploaded)
+            df.columns = df.columns.str.strip()
+
+            required = ["Project_ID", "Material_Name", "BOQ_Quantity", "uom", "Specification"]
+            missing = [c for c in required if c not in df.columns]
+
+            if missing:
+                st.error(f"Missing columns: {', '.join(missing)}")
+                st.info(f"Found columns: {', '.join(df.columns.tolist())}")
+            else:
+                st.success("File validated successfully!")
+                st.dataframe(df, use_container_width=True)
+
+                Path("data").mkdir(exist_ok=True)
+                if st.button("💾 Save as Active BOQ", use_container_width=True):
+                    df.to_excel("data/Design_boq.xlsx", index=False)
+                    st.success("BOQ saved! Procurement team can now access this data.")
+                    st.rerun()
+        except Exception as e:
+            st.error(f"Error reading file: {e}")
+
+    # Also allow uploading past vendor data
+    st.markdown("---")
+    st.markdown("### Upload Past Vendor History")
+    st.markdown("""
+    **Required Excel columns:**
+    - `Vendor_Name` — vendor company name
+    - `Email` — vendor email address
+    - `Material_Name` — material supplied
+    - `Project_Name` — project it was supplied for
+    - `Project_ID` — project ID
+    - `Unit_Price` — price per unit
+    - `Quantity` — quantity supplied
+    - `Date` — date of supply
+    """)
+
+    uploaded_v = st.file_uploader("Upload Vendor History Excel (.xlsx)", type=["xlsx"], key="vendor_upload")
+    if uploaded_v:
+        try:
+            df_v = pd.read_excel(uploaded_v)
+            df_v.columns = df_v.columns.str.strip()
+            st.dataframe(df_v, use_container_width=True)
+            if st.button("💾 Save Vendor History", use_container_width=True):
+                Path("data").mkdir(exist_ok=True)
+                df_v.to_excel("data/past_vendor_data.xlsx", index=False)
+                st.success("Vendor history saved!")
+        except Exception as e:
+            st.error(f"Error: {e}")
+
+
+# ─────────────────────────────────────────────────────────────
+# ████████████  PROCUREMENT SECTION  ████████████
+# ─────────────────────────────────────────────────────────────
+
+# ── LOGIN ─────────────────────────────────────────────────────
+def login_page():
+    col_back, _ = st.columns([1, 8])
+    with col_back:
+        if st.button("← Back"):
+            st.session_state.section = None
+            st.rerun()
+
+    st.markdown("## 🔐 Procurement Login")
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        username = st.text_input("Username")
+        password = st.text_input("Password", type="password")
+
+        if st.button("Login", use_container_width=True):
+            conn, cursor = get_cursor()
+            cursor.execute(
+                "SELECT * FROM users WHERE username=%s AND password=%s",
+                (username, password)
+            )
+            user = cursor.fetchone()
+            conn.close()
+            if user:
+                st.session_state.logged_in = True
+                st.session_state.page = "projects"
+                st.rerun()
+            else:
+                st.error("Invalid credentials")
+
+
+# ── SIDEBAR NAV ───────────────────────────────────────────────
+def procurement_nav():
+    st.markdown("""
+    <style>div[data-testid="stSidebar"] { display: block !important; }</style>
+    """, unsafe_allow_html=True)
+
+    with st.sidebar:
+        st.markdown("### 🏗️ Procurement")
+        st.markdown("---")
+
+        pages = {
+            "projects":    "📂 Projects",
+            "materials":   "📐 Materials & RFQ",
+            "tracking":    "📊 RFQ Tracking",
+            "comparison":  "⚖️ Quote Comparison",
+            "approval":    "🧾 Manager Approval",
+            "costing":     "💰 Costing",
+        }
+
+        for key, label in pages.items():
+            if st.button(label, use_container_width=True, key=f"nav_{key}"):
+                st.session_state.page = key
+                st.rerun()
+
+        st.markdown("---")
+        if st.session_state.active_project_id:
+            st.caption(f"Project: {st.session_state.project_sheet_id}")
+
+        if st.button("🚪 Logout", use_container_width=True):
+            st.session_state.logged_in = False
+            st.session_state.active_project_id = None
+            st.session_state.page = "projects"
+            st.rerun()
+
+        if st.button("← Main Menu", use_container_width=True):
+            st.session_state.section = None
+            st.session_state.logged_in = False
+            st.rerun()
+
+
+# ── 1. PROJECTS ───────────────────────────────────────────────
+def projects_page():
+    st.markdown("## 📂 Select Project")
 
     boq_df = load_boq()
-
     if boq_df is None:
-        st.error("BOQ file not found at data/Design_boq.xlsx")
+        st.error("BOQ file not found. Ask the design team to upload it first.")
         return
 
     unique_projects = boq_df["Project_ID"].dropna().unique()
+    selected = st.selectbox("Select Project ID from BOQ", unique_projects)
+    st.session_state.selected_project_code = selected
 
-    selected_project_code = st.selectbox("Select Project ID", unique_projects)
-    st.session_state["selected_project_code"] = selected_project_code
-
-    if selected_project_code:
+    if selected:
         conn, cursor = get_cursor()
-
-        cursor.execute(
-            "SELECT * FROM projects WHERE project_id=%s",
-            (selected_project_code,)
-        )
+        cursor.execute("SELECT * FROM projects WHERE project_id=%s", (selected,))
         existing = cursor.fetchone()
-
         if not existing:
             cursor.execute(
                 "INSERT INTO projects (project_id, project_name) VALUES (%s, %s)",
-                (selected_project_code, selected_project_code)
+                (str(selected), str(selected))
             )
             conn.commit()
-
-        cursor.execute(
-            "SELECT id FROM projects WHERE project_id=%s",
-            (selected_project_code,)
-        )
-        project_id = cursor.fetchone()["id"]
+        cursor.execute("SELECT id FROM projects WHERE project_id=%s", (str(selected),))
+        row = cursor.fetchone()
         conn.close()
 
-        st.session_state.active_project_id = project_id
-        st.session_state.project_sheet_id = selected_project_code
-        st.success(f"Project {selected_project_code} ready for procurement")
+        st.session_state.active_project_id = row["id"]
+        st.session_state.project_sheet_id  = str(selected)
+
+        # Show project summary from BOQ
+        project_materials = boq_df[boq_df["Project_ID"] == selected]
+        st.success(f"Project **{selected}** loaded — {len(project_materials)} materials")
+        st.dataframe(project_materials[["Material_Name", "BOQ_Quantity", "uom", "Specification"]],
+                     use_container_width=True)
+
+        if st.button("Go to Materials →", use_container_width=True):
+            st.session_state.page = "materials"
+            st.rerun()
 
 
-# =========================
-# MATERIAL SECTION
-# =========================
-
-def material_section():
-
-    selected_project_code = st.session_state.get("selected_project_code")
+# ── 2. MATERIALS & RFQ ────────────────────────────────────────
+def materials_page():
+    st.markdown("## 📐 Materials & RFQ")
 
     if not st.session_state.active_project_id:
         st.warning("Please select a project first.")
+        if st.button("Go to Projects"):
+            st.session_state.page = "projects"
+            st.rerun()
         return
-
-    st.subheader("📐 Materials From BOQ")
 
     boq_df = load_boq()
+    if boq_df is None:
+        st.error("BOQ file not found.")
+        return
 
-    project_materials = boq_df[boq_df["Project_ID"] == selected_project_code]
+    project_code = st.session_state.selected_project_code
+    project_materials = boq_df[boq_df["Project_ID"] == project_code]
 
     if project_materials.empty:
-        st.info("No materials found for this project.")
+        st.info("No materials in BOQ for this project.")
         return
 
-    material_names = project_materials["Material_Name"].unique()
-    selected_material = st.selectbox("Select Material", material_names)
+    selected_material = st.selectbox("Select Material", project_materials["Material_Name"].unique())
+    mat_row = project_materials[project_materials["Material_Name"] == selected_material].iloc[0]
 
-    if not selected_material:
-        return
+    quantity      = mat_row["BOQ_Quantity"]
+    uom           = mat_row["uom"]
+    specification = mat_row["Specification"]
 
-    material_row = project_materials[
-        project_materials["Material_Name"] == selected_material
-    ].iloc[0]
-
-    quantity = material_row["BOQ_Quantity"]
-    uom = material_row["uom"]
-    specification = material_row["Specification"]
-
+    # Material details card
     st.markdown("### Material Details")
-    st.write(f"**Material:** {selected_material}")
-    st.write(f"**Quantity:** {quantity} {uom}")
-    st.write(f"**Specification:** {specification}")
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Quantity", f"{quantity} {uom}")
+    col2.metric("Material", selected_material)
+    col3.metric("Specification", str(specification)[:40])
 
+    # ── Past Vendor History ──
     st.markdown("### 📊 Past Vendor History")
-
-    vendor_df = load_vendor_data()
+    vendor_df = load_vendor_history()
 
     if vendor_df is None:
-        st.warning("Past vendor data file not found at data/past_vendor_data.xlsx")
-        return
+        st.warning("No past vendor data found. Ask design team to upload it.")
+    else:
+        vendor_df["Material_Name"] = vendor_df["Material_Name"].str.strip().str.lower()
+        filtered = vendor_df[
+            vendor_df["Material_Name"] == selected_material.strip().lower()
+        ].copy()
 
-    vendor_df["Material_Name"] = vendor_df["Material_Name"].str.strip().str.lower()
-    selected_material_clean = selected_material.strip().lower()
-
-    filtered_vendors = vendor_df[
-        vendor_df["Material_Name"] == selected_material_clean
-    ].copy()
-
-    if filtered_vendors.empty:
-        st.warning("No past vendor history found for this material.")
-        return
-
-    filtered_vendors["Select"] = False
-
-    edited_df = st.data_editor(filtered_vendors, use_container_width=True)
-
-    # =========================
-    # SEND RFQ
-    # =========================
-
-    if st.button("📤 Send RFQ"):
-
-        selected_rows = edited_df[edited_df["Select"] == True]
-
-        if selected_rows.empty:
-            st.warning("Select at least one vendor.")
-            return
-
-        conn, cursor = get_cursor()
-
-        cursor.execute(
-            """
-            INSERT INTO rfq_master
-                (project_id, material_name, quantity, uom, specification, rfq_date, status)
-            VALUES (%s, %s, %s, %s, %s, CURRENT_TIMESTAMP, %s)
-            """,
-            (
-                st.session_state.active_project_id,
-                selected_material,
-                float(quantity),
-                str(uom),
-                str(specification),
-                "Sent"
-            )
-        )
-        cursor.execute("SELECT lastval() AS rfq_id")
-        rfq_id = cursor.fetchone()["rfq_id"]
-
-        for _, row in selected_rows.iterrows():
-            vendor_name = row["Vendor_Name"]
-            vendor_email = row["Email"]
-
-            email_sent = send_rfq_email(
-                vendor_email,
-                vendor_name,
-                selected_material,
-                quantity,
-                uom,
-                specification,
-                rfq_id,
-                st.session_state.project_sheet_id
+        if filtered.empty:
+            st.info("No past vendor history for this material.")
+        else:
+            # Show all historical details
+            display_cols = [c for c in ["Vendor_Name", "Email", "Project_Name",
+                                         "Project_ID", "Unit_Price", "Quantity", "Date"]
+                            if c in filtered.columns]
+            filtered["Select"] = False
+            edited = st.data_editor(
+                filtered[display_cols + ["Select"]],
+                use_container_width=True,
+                hide_index=True,
             )
 
-            if email_sent:
-                st.success(f"✅ RFQ sent to {vendor_name}")
-            else:
-                st.error(f"❌ Failed to send email to {vendor_name}")
+            # ── Send RFQ ──
+            st.markdown("---")
+            if st.button("📤 Send RFQ to Selected Vendors", use_container_width=True):
+                selected_rows = edited[edited["Select"] == True]
+                if selected_rows.empty:
+                    st.warning("Select at least one vendor.")
+                    return
 
-            cursor.execute(
-                """
-                INSERT INTO vendor_quotes
-                    (rfq_id, vendor_name, vendor_email, status)
-                VALUES (%s, %s, %s, %s)
-                """,
-                (rfq_id, vendor_name, vendor_email, "RFQ Sent")
-            )
+                conn, cursor = get_cursor()
+                try:
+                    cursor.execute("""
+                        INSERT INTO rfq_master
+                            (project_id, material_name, quantity, uom,
+                             specification, rfq_date, status)
+                        VALUES (%s, %s, %s, %s, %s, CURRENT_TIMESTAMP, %s)
+                    """, (
+                        st.session_state.active_project_id,
+                        selected_material,
+                        float(quantity),
+                        str(uom),
+                        str(specification),
+                        "Sent"
+                    ))
+                    cursor.execute("SELECT lastval() AS rfq_id")
+                    rfq_id = cursor.fetchone()["rfq_id"]
 
-        conn.commit()
-        conn.close()
-        st.success("RFQ process completed.")
+                    for _, row in selected_rows.iterrows():
+                        vname  = row["Vendor_Name"]
+                        vemail = row["Email"]
+                        sent = send_rfq_email(
+                            vemail, vname, selected_material,
+                            quantity, uom, specification,
+                            rfq_id, st.session_state.project_sheet_id
+                        )
+                        if sent:
+                            st.success(f"✅ RFQ sent to {vname}")
+                        else:
+                            st.error(f"❌ Failed to send to {vname}")
+
+                        cursor.execute("""
+                            INSERT INTO vendor_quotes (rfq_id, vendor_name, vendor_email, status)
+                            VALUES (%s, %s, %s, %s)
+                        """, (rfq_id, vname, vemail, "RFQ Sent"))
+
+                    conn.commit()
+                    st.success(f"RFQ-{rfq_id} created and sent!")
+                except Exception as e:
+                    conn.rollback()
+                    st.error("Error sending RFQ:")
+                    st.exception(e)
+                finally:
+                    conn.close()
 
 
-# =========================
-# RFQ TRACKING
-# =========================
+# ── 3. RFQ TRACKING ───────────────────────────────────────────
+def tracking_page():
+    st.markdown("## 📊 RFQ Tracking")
 
-def rfq_tracking_section():
-
-    st.title("📊 RFQ Tracking")
-
-    if st.button("📩 Fetch Vendor Replies"):
-        try:
-            with st.spinner("Reading vendor emails..."):
-                from services.gmail_service import fetch_rfq_replies
-                fetch_rfq_replies()
-            st.success("Vendor replies processed successfully")
-        except Exception as e:
-            st.error(f"Error fetching replies: {e}")
+    col1, col2 = st.columns([3, 1])
+    with col2:
+        if st.button("📩 Fetch Vendor Replies", use_container_width=True):
+            try:
+                with st.spinner("Scanning inbox..."):
+                    from services.gmail_service import fetch_rfq_replies
+                    fetch_rfq_replies()
+                st.success("Inbox scanned successfully.")
+                st.rerun()
+            except Exception as e:
+                st.error(f"Error: {e}")
 
     conn, cursor = get_cursor()
 
     cursor.execute("SELECT id, project_id FROM projects ORDER BY id DESC")
     projects = cursor.fetchall()
-
     if not projects:
         st.info("No projects found.")
         conn.close()
         return
 
-    project_dict = {p["project_id"]: p["id"] for p in projects}
-    selected_project = st.selectbox("Select Project", list(project_dict.keys()))
-    selected_project_id = project_dict[selected_project]
+    pdict = {p["project_id"]: p["id"] for p in projects}
+    sel   = st.selectbox("Select Project", list(pdict.keys()))
+    pid   = pdict[sel]
 
     cursor.execute("""
         SELECT
-            rm.rfq_id        AS "RFQ ID",
-            rm.material_name AS "Material",
-            rm.status        AS "RFQ Status",
-            rv.vendor_name   AS "Vendor",
-            rv.status        AS "Vendor Status",
+            rm.rfq_id           AS "RFQ ID",
+            rm.material_name    AS "Material",
+            rm.rfq_date         AS "RFQ Date",
+            rm.status           AS "RFQ Status",
+            rv.vendor_name      AS "Vendor",
+            rv.status           AS "Vendor Status",
             rm.approval_status  AS "Approval Status"
         FROM rfq_master rm
         LEFT JOIN vendor_quotes rv ON rm.rfq_id = rv.rfq_id
         WHERE rm.project_id = %s
         ORDER BY rm.rfq_id DESC
-    """, (selected_project_id,))
+    """, (pid,))
 
     rows = cursor.fetchall()
     conn.close()
@@ -1867,56 +2771,54 @@ def rfq_tracking_section():
     st.dataframe(pd.DataFrame(rows), use_container_width=True)
 
 
-# =========================
-# QUOTE COMPARISON
-# =========================
-
-def comparison_section():
-
-    st.title("📊 Vendor Quote Comparison")
+# ── 4. QUOTE COMPARISON ───────────────────────────────────────
+def comparison_page():
+    st.markdown("## ⚖️ Quote Comparison")
 
     conn, cursor = get_cursor()
 
     cursor.execute("SELECT id, project_id FROM projects ORDER BY id DESC")
     projects = cursor.fetchall()
-
     if not projects:
         st.warning("No projects found.")
         conn.close()
         return
 
-    project_dict = {p["project_id"]: p["id"] for p in projects}
-    selected_project = st.selectbox("Select Project", list(project_dict.keys()))
-    selected_project_id = project_dict[selected_project]
+    pdict = {p["project_id"]: p["id"] for p in projects}
+    sel   = st.selectbox("Select Project", list(pdict.keys()))
+    pid   = pdict[sel]
 
     cursor.execute(
         "SELECT DISTINCT material_name FROM rfq_master WHERE project_id=%s",
-        (selected_project_id,)
+        (pid,)
     )
-    materials = cursor.fetchall()
-
-    if not materials:
-        st.warning("No materials found for this project.")
+    mats = cursor.fetchall()
+    if not mats:
+        st.warning("No materials found.")
         conn.close()
         return
 
-    material_list = [m["material_name"] for m in materials]
-    selected_material = st.selectbox("Select Material", material_list)
+    mat = st.selectbox("Select Material", [m["material_name"] for m in mats])
 
     cursor.execute("""
         SELECT
+            vq.id,
             vq.rfq_id,
             vq.vendor_name,
+            vq.vendor_email,
             vq.unit_price,
             vq.delivery_time,
-            vq.payment_terms
+            vq.payment_terms,
+            vq.status,
+            vq.round
         FROM vendor_quotes vq
         WHERE vq.rfq_id IN (
             SELECT rfq_id FROM rfq_master
-            WHERE project_id = %s
-            AND LOWER(TRIM(material_name)) = LOWER(TRIM(%s))
+            WHERE project_id=%s
+            AND LOWER(TRIM(material_name))=LOWER(TRIM(%s))
         )
-    """, (selected_project_id, selected_material))
+        ORDER BY vq.rfq_id, vq.round DESC
+    """, (pid, mat))
 
     rows = cursor.fetchall()
     conn.close()
@@ -1926,189 +2828,200 @@ def comparison_section():
         return
 
     df = pd.DataFrame([dict(r) for r in rows])
-    df.columns = ["RFQ ID", "Vendor", "Unit Price", "Delivery Time", "Payment Terms"]
-    df["Unit Price"] = pd.to_numeric(df["Unit Price"], errors="coerce")
-    df["Select Vendor"] = False
 
-    # Highlight best price
-    if df["Unit Price"].notna().any():
-        best_idx = df["Unit Price"].idxmin()
-        best_vendor = df.loc[best_idx]
-        st.success(f"💰 Lowest Quote: **{best_vendor['Vendor']}** at ₹ {best_vendor['Unit Price']:,.2f}")
+    # Highlight lowest price
+    df["unit_price"] = pd.to_numeric(df["unit_price"], errors="coerce")
+    valid_prices = df[df["unit_price"].notna()]
+    if not valid_prices.empty:
+        min_idx = valid_prices["unit_price"].idxmin()
+        best = df.loc[min_idx]
+        st.success(f"💰 Lowest Quote: **{best['vendor_name']}** — ₹ {best['unit_price']:,.2f}")
 
-    edited_df = st.data_editor(
-        df,
+    # Display table
+    display_df = df[[
+        "rfq_id", "vendor_name", "unit_price",
+        "delivery_time", "payment_terms", "status", "round"
+    ]].copy()
+    display_df.columns = [
+        "RFQ ID", "Vendor", "Unit Price (₹)",
+        "Delivery Time", "Payment Terms", "Status", "Round"
+    ]
+    display_df["Select"] = False
+
+    edited = st.data_editor(
+        display_df,
         use_container_width=True,
+        hide_index=True,
         column_config={
-            "RFQ ID": st.column_config.Column(disabled=True),
-            "Vendor": st.column_config.Column(disabled=True),
-            "Unit Price": st.column_config.NumberColumn(format="₹%.2f"),
-            "Delivery Time": st.column_config.TextColumn(),
-            "Payment Terms": st.column_config.TextColumn(),
-            "Select Vendor": st.column_config.CheckboxColumn("Select"),
-        },
-        num_rows="fixed"
+            "RFQ ID":       st.column_config.Column(disabled=True),
+            "Vendor":       st.column_config.Column(disabled=True),
+            "Status":       st.column_config.Column(disabled=True),
+            "Round":        st.column_config.Column(disabled=True),
+            "Unit Price (₹)": st.column_config.NumberColumn(format="₹%.2f"),
+        }
     )
 
-    col1, col2 = st.columns(2)
+    st.markdown("---")
+    col1, col2, col3 = st.columns(3)
 
+    # ── Save Edits ──
     with col1:
-        if st.button("💾 Save Edited Quotes"):
+        if st.button("💾 Save Edited Quotes", use_container_width=True):
             conn, cursor = get_cursor()
-            for _, row in edited_df.iterrows():
-                cursor.execute("""
-                    UPDATE vendor_quotes
-                    SET unit_price = %s, delivery_time = %s, payment_terms = %s
-                    WHERE rfq_id = %s AND vendor_name = %s
-                """, (
-                    row["Unit Price"],
-                    row["Delivery Time"],
-                    row["Payment Terms"],
-                    row["RFQ ID"],
-                    row["Vendor"]
-                ))
-            conn.commit()
-            conn.close()
-            st.success("Quotes updated successfully")
-
-    with col2:
-        # if st.button("📤 Send Selected Vendor for Approval"):
-
-        #     selected_rows = edited_df[edited_df["Select Vendor"] == True]
-
-        #     if selected_rows.empty:
-        #         st.warning("Please select a vendor first.")
-        #         return
-
-        #     if len(selected_rows) > 1:
-        #         st.warning("Please select only one vendor for approval.")
-        #         return
-
-        #     vendor_row = selected_rows.iloc[0]
-
-        #     conn, cursor = get_cursor()
-
-        #     # Check for duplicate pending approval
-        #     cursor.execute("""
-        #         SELECT id FROM vendor_approvals
-        #         WHERE project_id=%s AND material_name=%s AND vendor_name=%s AND status='Pending'
-        #     """, (selected_project_id, selected_material, vendor_row["Vendor"]))
-
-        #     existing = cursor.fetchone()
-
-        #     if existing:
-        #         st.warning("Approval request already sent for this vendor.")
-        #         conn.close()
-        #         return
-
-        #     cursor.execute("""
-        #         INSERT INTO vendor_approvals
-        #             (project_id, material_name, vendor_name, unit_price,
-        #              delivery_time, payment_terms, status)
-        #         VALUES (%s, %s, %s, %s, %s, %s, %s)
-        #     """, (
-        #         int(selected_project_id),
-        #         selected_material,
-        #         vendor_row["Vendor"],
-        #         vendor_row["Unit Price"],
-        #         vendor_row["Delivery Time"],
-        #         vendor_row["Payment Terms"],
-        #         "Pending"
-        #     ))
-
-        #     cursor.execute("""
-        #         UPDATE rfq_master
-        #         SET approval_status = 'Pending'
-        #         WHERE project_id=%s AND LOWER(TRIM(material_name)) = LOWER(TRIM(%s))
-        #     """, (selected_project_id, selected_material))
-
-        #     conn.commit()
-        #     conn.close()
-
-        #     # Send email — pass project_id integer, material name, vendor name, price
-        #     send_approval_email(
-        #         selected_project_id,
-        #         selected_material,
-        #         vendor_row["Vendor"],
-        #         vendor_row["Unit Price"]
-        #     )
-
-        #     st.success(f"✅ {vendor_row['Vendor']} sent to manager for approval.")
-        if st.button("📤 Send Selected Vendor for Approval"):
-
-            selected_rows = edited_df[edited_df["Select Vendor"] == True]
-
-            if selected_rows.empty:
-                st.warning("Please select a vendor first.")
-                return
-
-            # if len(selected_rows) > 1:
-            #     st.warning("Please select only one vendor for approval.")
-            #     return
-
-            vendor_row = selected_rows.iloc[0]
-
-            conn, cursor = get_cursor()
-
             try:
-                cursor.execute("""
-                    SELECT id FROM vendor_approvals
-                    WHERE project_id=%s AND material_name=%s AND vendor_name=%s AND status='Pending'
-                """, (selected_project_id, selected_material, vendor_row["Vendor"]))
-
-                existing = cursor.fetchone()
-
-                if existing:
-                    st.warning("Approval request already sent for this vendor.")
-                    conn.close()
-                    return
-
-                cursor.execute("""
-                    INSERT INTO vendor_approvals
-                        (project_id, material_name, vendor_name, unit_price,
-                         delivery_time, payment_terms, status)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s)
-                """, (
-                    selected_project_id,
-                    selected_material,
-                    vendor_row["Vendor"],
-                    float(vendor_row["Unit Price"]),
-                    vendor_row["Delivery Time"],
-                    vendor_row["Payment Terms"],
-                    "Pending"
-                ))
-
-                cursor.execute("""
-                    UPDATE rfq_master
-                    SET approval_status = 'Pending'
-                    WHERE project_id=%s AND LOWER(TRIM(material_name)) = LOWER(TRIM(%s))
-                """, (selected_project_id, selected_material))
-
+                for i, row in edited.iterrows():
+                    orig = df.iloc[i]
+                    cursor.execute("""
+                        UPDATE vendor_quotes
+                        SET unit_price=%s, delivery_time=%s, payment_terms=%s
+                        WHERE id=%s
+                    """, (
+                        row["Unit Price (₹)"],
+                        row["Delivery Time"],
+                        row["Payment Terms"],
+                        int(orig["id"])
+                    ))
                 conn.commit()
-                conn.close()
-
-                send_approval_email(
-                    selected_project_id,
-                    selected_material,
-                    vendor_row["Vendor"],
-                    vendor_row["Unit Price"]
-                )
-
-                st.success(f"✅ {vendor_row['Vendor']} sent to manager for approval.")
-
+                st.success("Quotes updated.")
             except Exception as e:
                 conn.rollback()
-                conn.close()
-                st.error("Error details:")
                 st.exception(e)
+            finally:
+                conn.close()
 
-# =========================
-# MANAGER APPROVAL
-# =========================
+    # ── Reverse RFQ ──
+    with col2:
+        if st.button("📨 Send Reverse RFQ", use_container_width=True):
+            selected = edited[edited["Select"] == True]
+            if selected.empty:
+                st.warning("Select vendors to send reverse RFQ.")
+            else:
+                st.session_state["reverse_rfq_vendors"] = selected.index.tolist()
+                st.session_state["reverse_rfq_df"]      = df
+                st.session_state["show_reverse_form"]   = True
 
-def manager_approval_section():
+    # ── Send for Approval ──
+    with col3:
+        if st.button("📤 Send for Manager Approval", use_container_width=True):
+            selected = edited[edited["Select"] == True]
+            if selected.empty:
+                st.warning("Select at least one vendor.")
+            else:
+                conn, cursor = get_cursor()
+                try:
+                    vendors_data = []
+                    for i in selected.index:
+                        orig = df.iloc[i]
+                        cursor.execute("""
+                            SELECT id FROM vendor_approvals
+                            WHERE project_id=%s AND material_name=%s
+                            AND vendor_name=%s AND status='Pending'
+                        """, (pid, mat, orig["vendor_name"]))
+                        if cursor.fetchone():
+                            st.warning(f"Already pending: {orig['vendor_name']}")
+                            continue
+                        cursor.execute("""
+                            INSERT INTO vendor_approvals
+                                (project_id, material_name, vendor_name,
+                                 unit_price, delivery_time, payment_terms, status)
+                            VALUES (%s,%s,%s,%s,%s,%s,'Pending')
+                        """, (
+                            pid, mat,
+                            orig["vendor_name"],
+                            float(orig["unit_price"]) if orig["unit_price"] else None,
+                            orig["delivery_time"],
+                            orig["payment_terms"],
+                        ))
+                        vendors_data.append({
+                            "vendor_name":   orig["vendor_name"],
+                            "unit_price":    orig["unit_price"] or 0,
+                            "delivery_time": orig["delivery_time"],
+                            "payment_terms": orig["payment_terms"],
+                        })
 
-    st.title("🧾 Manager Vendor Approvals")
+                    cursor.execute("""
+                        UPDATE rfq_master SET approval_status='Pending'
+                        WHERE project_id=%s
+                        AND LOWER(TRIM(material_name))=LOWER(TRIM(%s))
+                    """, (pid, mat))
+
+                    conn.commit()
+
+                    if vendors_data:
+                        send_approval_email(pid, mat, vendors_data)
+                        st.success(f"✅ {len(vendors_data)} vendor(s) sent for approval.")
+                    else:
+                        st.info("No new vendors to send.")
+                except Exception as e:
+                    conn.rollback()
+                    st.exception(e)
+                finally:
+                    conn.close()
+
+    # ── Reverse RFQ Form ──
+    if st.session_state.get("show_reverse_form"):
+        st.markdown("---")
+        st.markdown("### 📨 Reverse RFQ — Send Comments to Vendors")
+
+        comments = st.text_area(
+            "Comments / Requirements to send to vendor",
+            placeholder="e.g. Your price is too high. Please review and submit best price within 2 days.",
+            height=120
+        )
+
+        col_a, col_b = st.columns(2)
+        with col_a:
+            if st.button("Send Reverse RFQ", use_container_width=True):
+                if not comments.strip():
+                    st.warning("Please add comments.")
+                else:
+                    rev_df = st.session_state["reverse_rfq_df"]
+                    idxs   = st.session_state["reverse_rfq_vendors"]
+                    conn, cursor = get_cursor()
+                    try:
+                        for i in idxs:
+                            orig = rev_df.iloc[i]
+                            sent = send_reverse_rfq_email(
+                                orig["vendor_email"],
+                                orig["vendor_name"],
+                                mat,
+                                int(orig["rfq_id"]),
+                                float(orig["unit_price"] or 0),
+                                comments
+                            )
+                            if sent:
+                                st.success(f"✅ Reverse RFQ sent to {orig['vendor_name']}")
+                            else:
+                                st.error(f"❌ Failed: {orig['vendor_name']}")
+
+                            cursor.execute("""
+                                INSERT INTO reverse_rfq
+                                    (rfq_id, vendor_name, vendor_email, comments)
+                                VALUES (%s, %s, %s, %s)
+                            """, (
+                                int(orig["rfq_id"]),
+                                orig["vendor_name"],
+                                orig["vendor_email"],
+                                comments
+                            ))
+                        conn.commit()
+                        st.session_state["show_reverse_form"] = False
+                    except Exception as e:
+                        conn.rollback()
+                        st.exception(e)
+                    finally:
+                        conn.close()
+
+        with col_b:
+            if st.button("Cancel", use_container_width=True):
+                st.session_state["show_reverse_form"] = False
+                st.rerun()
+
+
+# ── 5. MANAGER APPROVAL ───────────────────────────────────────
+def approval_page():
+    st.markdown("## 🧾 Manager Approval")
+    st.info("Review vendor quotes and historical data before approving or rejecting.")
 
     conn, cursor = get_cursor()
 
@@ -2116,101 +3029,106 @@ def manager_approval_section():
         SELECT id, project_id, material_name, vendor_name,
                unit_price, delivery_time, payment_terms
         FROM vendor_approvals
-        WHERE status = 'Pending'
+        WHERE status='Pending'
         ORDER BY id DESC
     """)
-
     approvals = cursor.fetchall()
 
     if not approvals:
-        st.info("No approvals pending.")
+        st.success("No pending approvals.")
         conn.close()
         return
 
     for row in approvals:
-        with st.expander(f"Project: {row['project_id']} | Material: {row['material_name']}"):
-            st.write(f"**Vendor:** {row['vendor_name']}")
-            st.write(f"**Unit Price:** ₹ {row['unit_price']}")
-            st.write(f"**Delivery:** {row['delivery_time']}")
-            st.write(f"**Payment Terms:** {row['payment_terms']}")
-
+        with st.expander(
+            f"Project: {row['project_id']} | Material: {row['material_name']} | "
+            f"Vendor: {row['vendor_name']}",
+            expanded=True
+        ):
             col1, col2 = st.columns(2)
 
             with col1:
-                if st.button(f"✅ Approve", key=f"approve_{row['id']}"):
-                    conn2, cursor2 = get_cursor()
-                    # cursor2.execute(
-                    #     "UPDATE vendor_approvals SET status='Approved' WHERE id=%s",
-                    #     (row["id"],)
-                    # )
-                    # cursor2.execute("""
-                    #     UPDATE rfq_master SET status='Vendor Approved'
-                    #     WHERE project_id=%s AND LOWER(TRIM(material_name))=LOWER(TRIM(%s))
-                    # """, (row["project_id"], row["material_name"]))
+                st.markdown("**Vendor Quote**")
+                st.write(f"Vendor: **{row['vendor_name']}**")
+                st.write(f"Unit Price: **₹ {row['unit_price']:,.2f}**" if row['unit_price'] else "Unit Price: N/A")
+                st.write(f"Delivery: {row['delivery_time']}")
+                st.write(f"Payment: {row['payment_terms']}")
 
+            with col2:
+                # Historical prices for same material
+                st.markdown("**Historical Prices (same material)**")
+                hist_df = load_vendor_history()
+                if hist_df is not None:
+                    hist_df["Material_Name"] = hist_df["Material_Name"].str.strip().str.lower()
+                    mat_clean = str(row["material_name"]).strip().lower()
+                    hist = hist_df[hist_df["Material_Name"] == mat_clean]
+                    if not hist.empty:
+                        show_cols = [c for c in ["Vendor_Name", "Project_Name",
+                                                  "Unit_Price", "Date"] if c in hist.columns]
+                        st.dataframe(hist[show_cols], use_container_width=True, hide_index=True)
+                    else:
+                        st.info("No historical data for this material.")
+                else:
+                    st.info("No vendor history file found.")
+
+            st.markdown("---")
+            btn_col1, btn_col2 = st.columns(2)
+
+            with btn_col1:
+                if st.button("✅ Approve", key=f"approve_{row['id']}", use_container_width=True):
+                    conn2, cursor2 = get_cursor()
                     cursor2.execute(
                         "UPDATE vendor_approvals SET status='Approved' WHERE id=%s",
                         (row["id"],)
                     )
                     cursor2.execute("""
-                        UPDATE rfq_master SET status='Vendor Approved', approval_status='Approved'
-                        WHERE project_id=%s AND LOWER(TRIM(material_name))=LOWER(TRIM(%s))
+                        UPDATE rfq_master
+                        SET status='Vendor Approved', approval_status='Approved'
+                        WHERE project_id=%s
+                        AND LOWER(TRIM(material_name))=LOWER(TRIM(%s))
                     """, (row["project_id"], row["material_name"]))
-
                     conn2.commit()
                     conn2.close()
-                    st.success("Vendor Approved ✅")
+                    st.success("Approved!")
                     st.rerun()
 
-            with col2:
-                if st.button(f"❌ Reject", key=f"reject_{row['id']}"):
+            with btn_col2:
+                if st.button("❌ Reject", key=f"reject_{row['id']}", use_container_width=True):
                     conn2, cursor2 = get_cursor()
-                    # cursor2.execute(
-                    #     "UPDATE vendor_approvals SET status='Rejected' WHERE id=%s",
-                    #     (row["id"],)
-                    # )
-                    # cursor2.execute("""
-                    #     UPDATE rfq_master SET status='Vendor Rejected'
-                    #     WHERE project_id=%s AND LOWER(TRIM(material_name))=LOWER(TRIM(%s))
-                    # """, (row["project_id"], row["material_name"]))
-                    # conn2.commit()
                     cursor2.execute(
                         "UPDATE vendor_approvals SET status='Rejected' WHERE id=%s",
-                       (row["id"],)
+                        (row["id"],)
                     )
                     cursor2.execute("""
-                        UPDATE rfq_master SET status='Vendor Rejected', approval_status='Rejected'
-                        WHERE project_id=%s AND LOWER(TRIM(material_name))=LOWER(TRIM(%s))
+                        UPDATE rfq_master
+                        SET status='Vendor Rejected', approval_status='Rejected'
+                        WHERE project_id=%s
+                        AND LOWER(TRIM(material_name))=LOWER(TRIM(%s))
                     """, (row["project_id"], row["material_name"]))
-
+                    conn2.commit()
                     conn2.close()
-                    st.success("Vendor Rejected")
+                    st.success("Rejected.")
                     st.rerun()
 
     conn.close()
 
 
-# =========================
-# COSTING SECTION
-# =========================
-
-def costing_section():
-
-    st.title("💰 Project Costing")
+# ── 6. COSTING ────────────────────────────────────────────────
+def costing_page():
+    st.markdown("## 💰 Project Costing")
 
     conn, cursor = get_cursor()
 
     cursor.execute("SELECT id, project_id FROM projects ORDER BY id DESC")
     projects = cursor.fetchall()
-
     if not projects:
         st.warning("No projects found.")
         conn.close()
         return
 
-    project_dict = {p["project_id"]: p["id"] for p in projects}
-    selected_project = st.selectbox("Select Project", list(project_dict.keys()))
-    selected_project_id = project_dict[selected_project]
+    pdict = {p["project_id"]: p["id"] for p in projects}
+    sel   = st.selectbox("Select Project", list(pdict.keys()))
+    pid   = pdict[sel]
 
     cursor.execute("""
         SELECT
@@ -2223,9 +3141,9 @@ def costing_section():
         JOIN rfq_master rm
             ON rm.project_id = va.project_id
             AND LOWER(TRIM(rm.material_name)) = LOWER(TRIM(va.material_name))
-        WHERE va.project_id = %s AND va.status = 'Approved'
+        WHERE va.project_id=%s AND va.status='Approved'
         ORDER BY rm.material_name
-    """, (selected_project_id,))
+    """, (pid,))
 
     rows = cursor.fetchall()
     conn.close()
@@ -2237,12 +3155,14 @@ def costing_section():
     df = pd.DataFrame([dict(r) for r in rows])
     df.columns = ["Material", "Quantity", "UOM", "Vendor", "Unit Price"]
     df["Unit Price"] = pd.to_numeric(df["Unit Price"], errors="coerce")
-    df["Quantity"] = pd.to_numeric(df["Quantity"], errors="coerce")
+    df["Quantity"]   = pd.to_numeric(df["Quantity"],   errors="coerce")
     df["Total Cost"] = df["Quantity"] * df["Unit Price"]
 
-    st.subheader("📊 Material-wise Costing")
     st.dataframe(
-        df.style.format({"Unit Price": "₹{:,.2f}", "Total Cost": "₹{:,.2f}"}),
+        df.style.format({
+            "Unit Price": "₹{:,.2f}",
+            "Total Cost": "₹{:,.2f}"
+        }),
         use_container_width=True
     )
 
@@ -2251,42 +3171,43 @@ def costing_section():
     st.success(f"💰 Total Project Cost: ₹ {total:,.2f}")
 
 
-# =========================
-# DASHBOARD
-# =========================
+# ─────────────────────────────────────────────────────────────
+# ████████████  ROUTER  ████████████
+# ─────────────────────────────────────────────────────────────
+def main():
+    section = st.session_state.section
 
-def dashboard():
+    # Landing
+    if section is None:
+        landing_page()
+        return
 
-    st.sidebar.title("🏗️ Procurement System")
-    menu = st.sidebar.radio(
-        "Navigation",
-        ["Projects", "Materials & RFQ", "RFQ Tracking",
-         "Quote Comparison", "Manager Approval", "Costing"]
-    )
+    # Design section
+    if section == "design":
+        design_section()
+        return
 
-    if menu == "Projects":
-        project_section()
-    elif menu == "Materials & RFQ":
-        material_section()
-    elif menu == "RFQ Tracking":
-        rfq_tracking_section()
-    elif menu == "Quote Comparison":
-        comparison_section()
-    elif menu == "Manager Approval":
-        manager_approval_section()
-    elif menu == "Costing":
-        costing_section()
+    # Procurement section
+    if section == "procurement":
+        if not st.session_state.logged_in:
+            login_page()
+            return
 
-    if st.sidebar.button("🚪 Logout"):
-        st.session_state.logged_in = False
-        st.rerun()
+        procurement_nav()
+
+        page = st.session_state.page
+        if page == "projects":
+            projects_page()
+        elif page == "materials":
+            materials_page()
+        elif page == "tracking":
+            tracking_page()
+        elif page == "comparison":
+            comparison_page()
+        elif page == "approval":
+            approval_page()
+        elif page == "costing":
+            costing_page()
 
 
-# =========================
-# APP ENTRY POINT
-# =========================
-
-if not st.session_state.logged_in:
-    login_page()
-else:
-    dashboard()
+main()

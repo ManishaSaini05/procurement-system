@@ -96,3 +96,10 @@ urllib3==2.6.3
 watchdog==6.0.0
 xformers==0.0.35
 psycopg2-binary
+
+streamlit
+psycopg2-binary
+pandas
+openpyxl
+pdfplumber
+anthropic
