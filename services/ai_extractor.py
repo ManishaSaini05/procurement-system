@@ -246,6 +246,146 @@
 #         print("Claude extraction failed:", e)
 #         return {}
 
+# import json
+# import re
+# import os
+# from anthropic import Anthropic
+
+# client = Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+
+
+# def extract_vendor_quote(text):
+
+#     # =============================================
+#     # STEP 1: REGEX EXTRACTION (fast, reliable)
+#     # Works directly on the structured PDF text
+#     # =============================================
+
+#     unit_price    = None
+#     delivery_days = None
+#     payment_terms = None
+
+#     # --- UNIT PRICE ---
+#     # Match "Unit Price | 4200" or "Unit Price 4200" pattern from table
+#     # Specifically looks for Unit Price column followed by the value
+#     # Avoids Total Price, Grand Total, GST amounts
+#     price_match = re.search(
+#         r'Nos\s*[|]?\s*(\d{3,7})\s*[|]?\s*\d{6,}',  # Nos | 4200 | 63000000
+#         text
+#     )
+#     if not price_match:
+#         price_match = re.search(
+#             r'Unit\s*Price\s*[|\s]+(\d{3,7})\b',      # Unit Price | 4200
+#             text, re.IGNORECASE
+#         )
+#     if not price_match:
+#         # Last resort: find price between unit column and a much larger total
+#         price_match = re.search(
+#             r'\bNos\b[^\d]*(\d{3,6})\b',              # after "Nos"
+#             text, re.IGNORECASE
+#         )
+#     if price_match:
+#         unit_price = float(price_match.group(1))
+
+#     # --- DELIVERY ---
+#     # Match "Delivery | 21 days from the receipt of PO"
+#     delivery_match = re.search(
+#         r'Delivery\s*[|\:]\s*([^\n|]+)',
+#         text, re.IGNORECASE
+#     )
+#     if delivery_match:
+#         delivery_days = delivery_match.group(1).strip()
+
+#     # --- PAYMENT TERMS ---
+#     # Match "Payment Terms | 100% payment against Proforma Invoice"
+#     payment_match = re.search(
+#         r'Payment\s*Terms?\s*[|\:]\s*([^\n|]+)',
+#         text, re.IGNORECASE
+#     )
+#     if payment_match:
+#         payment_terms = payment_match.group(1).strip()
+
+#     # If all 3 found by regex, return immediately — no need for AI
+#     if unit_price and delivery_days and payment_terms:
+#         print(f"✅ Regex extracted — Price: {unit_price} | Delivery: {delivery_days} | Payment: {payment_terms}")
+#         return {
+#             "unit_price": unit_price,
+#             "delivery_days": delivery_days,
+#             "payment_terms": payment_terms
+#         }
+
+#     # =============================================
+#     # STEP 2: AI EXTRACTION (fallback)
+#     # Only runs if regex missed something
+#     # =============================================
+
+#     print("Regex incomplete — trying AI extraction...")
+
+#     prompt = f"""
+# You are extracting data from a vendor quotation document.
+
+# The document has a table with these columns:
+# Sl No | Material | Product Description | QTY | Unit | Unit Price | Total Price
+
+# And a terms section like:
+# Payment Terms | 100% payment against Proforma Invoice  
+# Delivery | 21 days from the receipt of PO
+
+# Extract exactly these 3 fields and return ONLY valid JSON:
+
+# {{
+#     "unit_price": <number from Unit Price column, NOT Total Price or Grand Total>,
+#     "delivery_days": "<full delivery string>",
+#     "payment_terms": "<full payment terms string>"
+# }}
+
+# Rules:
+# - unit_price is the small per-unit number (like 4200), NOT the large total (like 63000000)
+# - If not found return null for that field
+# - Return JSON only, no markdown, no explanation
+
+# Already extracted by regex (null means not found yet):
+# unit_price: {unit_price}
+# delivery_days: {delivery_days}
+# payment_terms: {payment_terms}
+
+# Document:
+# {text[:3000]}
+# """
+
+#     try:
+#         response = client.messages.create(
+#             model="claude-haiku-4-5-20251001",
+#             max_tokens=300,
+#             messages=[{"role": "user", "content": prompt}]
+#         )
+
+#         text_response = response.content[0].text.strip()
+#         text_response = re.sub(r"```json|```", "", text_response).strip()
+
+#         json_match = re.search(r"\{.*\}", text_response, re.DOTALL)
+#         if json_match:
+#             ai_data = json.loads(json_match.group())
+
+#             # Only fill in what regex missed
+#             if not unit_price and ai_data.get("unit_price"):
+#                 unit_price = float(ai_data["unit_price"])
+#             if not delivery_days and ai_data.get("delivery_days"):
+#                 delivery_days = ai_data["delivery_days"]
+#             if not payment_terms and ai_data.get("payment_terms"):
+#                 payment_terms = ai_data["payment_terms"]
+
+#     except Exception as e:
+#         print(f"AI extraction failed: {e}")
+
+#     return {
+#         "unit_price": unit_price,
+#         "delivery_days": delivery_days,
+#         "payment_terms": payment_terms
+#     }
+
+# New version #
+
 import json
 import re
 import os
@@ -255,131 +395,98 @@ client = Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
 
 
 def extract_vendor_quote(text):
-
-    # =============================================
-    # STEP 1: REGEX EXTRACTION (fast, reliable)
-    # Works directly on the structured PDF text
-    # =============================================
+    """
+    Extract unit_price, delivery_days, payment_terms
+    from vendor email body and/or PDF quotation text.
+    Uses regex first (fast), falls back to AI.
+    """
 
     unit_price    = None
     delivery_days = None
     payment_terms = None
 
     # --- UNIT PRICE ---
-    # Match "Unit Price | 4200" or "Unit Price 4200" pattern from table
-    # Specifically looks for Unit Price column followed by the value
-    # Avoids Total Price, Grand Total, GST amounts
-    price_match = re.search(
-        r'Nos\s*[|]?\s*(\d{3,7})\s*[|]?\s*\d{6,}',  # Nos | 4200 | 63000000
-        text
-    )
-    if not price_match:
-        price_match = re.search(
-            r'Unit\s*Price\s*[|\s]+(\d{3,7})\b',      # Unit Price | 4200
-            text, re.IGNORECASE
-        )
-    if not price_match:
-        # Last resort: find price between unit column and a much larger total
-        price_match = re.search(
-            r'\bNos\b[^\d]*(\d{3,6})\b',              # after "Nos"
-            text, re.IGNORECASE
-        )
-    if price_match:
-        unit_price = float(price_match.group(1))
+    # Pattern 1: "Nos | 4200 | 63000000" — value between unit and large total
+    m = re.search(r'Nos\s*[|]?\s*(\d{3,7})\s*[|]?\s*\d{6,}', text)
+    if not m:
+        # Pattern 2: "Unit Price | 4200"
+        m = re.search(r'Unit\s*Price\s*[|\s]+(\d{3,7})\b', text, re.IGNORECASE)
+    if not m:
+        # Pattern 3: value after "Nos" keyword
+        m = re.search(r'\bNos\b[^\d]*(\d{3,6})\b', text, re.IGNORECASE)
+    if m:
+        unit_price = float(m.group(1))
 
     # --- DELIVERY ---
-    # Match "Delivery | 21 days from the receipt of PO"
-    delivery_match = re.search(
-        r'Delivery\s*[|\:]\s*([^\n|]+)',
-        text, re.IGNORECASE
-    )
-    if delivery_match:
-        delivery_days = delivery_match.group(1).strip()
+    # Pattern: "Delivery | 21 days from the receipt of PO"
+    m = re.search(r'Delivery\s*[|:]\s*([^\n|]+)', text, re.IGNORECASE)
+    if m:
+        delivery_days = m.group(1).strip()
+    if not delivery_days:
+        m = re.search(r'(\d+)\s*(day|days|week|weeks)[^\n]*', text, re.IGNORECASE)
+        if m:
+            delivery_days = m.group(0).strip()
 
     # --- PAYMENT TERMS ---
-    # Match "Payment Terms | 100% payment against Proforma Invoice"
-    payment_match = re.search(
-        r'Payment\s*Terms?\s*[|\:]\s*([^\n|]+)',
-        text, re.IGNORECASE
-    )
-    if payment_match:
-        payment_terms = payment_match.group(1).strip()
+    # Pattern: "Payment Terms | 100% payment against Proforma Invoice"
+    m = re.search(r'Payment\s*Terms?\s*[|:]\s*([^\n|]+)', text, re.IGNORECASE)
+    if m:
+        payment_terms = m.group(1).strip()
+    if not payment_terms:
+        m = re.search(r'(advance|credit|payment\s*\d+\s*days)', text, re.IGNORECASE)
+        if m:
+            payment_terms = m.group(0).strip()
 
-    # If all 3 found by regex, return immediately — no need for AI
+    # If all found, return without calling AI
     if unit_price and delivery_days and payment_terms:
-        print(f"✅ Regex extracted — Price: {unit_price} | Delivery: {delivery_days} | Payment: {payment_terms}")
-        return {
-            "unit_price": unit_price,
-            "delivery_days": delivery_days,
-            "payment_terms": payment_terms
-        }
+        print(f"Regex extracted — Price:{unit_price} | Delivery:{delivery_days} | Payment:{payment_terms}")
+        return {"unit_price": unit_price, "delivery_days": delivery_days, "payment_terms": payment_terms}
 
-    # =============================================
-    # STEP 2: AI EXTRACTION (fallback)
-    # Only runs if regex missed something
-    # =============================================
+    # --- AI FALLBACK ---
+    print("Regex incomplete, using AI extraction...")
+    try:
+        prompt = f"""
+You are extracting data from a vendor quotation (email or PDF).
 
-    print("Regex incomplete — trying AI extraction...")
-
-    prompt = f"""
-You are extracting data from a vendor quotation document.
-
-The document has a table with these columns:
+The document has a table:
 Sl No | Material | Product Description | QTY | Unit | Unit Price | Total Price
 
-And a terms section like:
-Payment Terms | 100% payment against Proforma Invoice  
-Delivery | 21 days from the receipt of PO
+And a terms section:
+Payment Terms | ...
+Delivery | ...
 
-Extract exactly these 3 fields and return ONLY valid JSON:
-
+Extract exactly these 3 fields. Return ONLY valid JSON:
 {{
-    "unit_price": <number from Unit Price column, NOT Total Price or Grand Total>,
-    "delivery_days": "<full delivery string>",
-    "payment_terms": "<full payment terms string>"
+    "unit_price": <number, NOT Total Price or Grand Total>,
+    "delivery_days": "<full delivery string or null>",
+    "payment_terms": "<full payment terms or null>"
 }}
 
-Rules:
-- unit_price is the small per-unit number (like 4200), NOT the large total (like 63000000)
-- If not found return null for that field
-- Return JSON only, no markdown, no explanation
-
-Already extracted by regex (null means not found yet):
+Already found by regex (null = not found yet):
 unit_price: {unit_price}
 delivery_days: {delivery_days}
 payment_terms: {payment_terms}
 
-Document:
+Document (first 3000 chars):
 {text[:3000]}
 """
-
-    try:
         response = client.messages.create(
             model="claude-haiku-4-5-20251001",
             max_tokens=300,
             messages=[{"role": "user", "content": prompt}]
         )
-
-        text_response = response.content[0].text.strip()
-        text_response = re.sub(r"```json|```", "", text_response).strip()
-
-        json_match = re.search(r"\{.*\}", text_response, re.DOTALL)
-        if json_match:
-            ai_data = json.loads(json_match.group())
-
-            # Only fill in what regex missed
-            if not unit_price and ai_data.get("unit_price"):
-                unit_price = float(ai_data["unit_price"])
-            if not delivery_days and ai_data.get("delivery_days"):
-                delivery_days = ai_data["delivery_days"]
-            if not payment_terms and ai_data.get("payment_terms"):
-                payment_terms = ai_data["payment_terms"]
-
+        raw = response.content[0].text.strip()
+        raw = re.sub(r"```json|```", "", raw).strip()
+        match = re.search(r"\{.*\}", raw, re.DOTALL)
+        if match:
+            ai = json.loads(match.group())
+            if not unit_price and ai.get("unit_price"):
+                unit_price = float(ai["unit_price"])
+            if not delivery_days and ai.get("delivery_days"):
+                delivery_days = ai["delivery_days"]
+            if not payment_terms and ai.get("payment_terms"):
+                payment_terms = ai["payment_terms"]
     except Exception as e:
         print(f"AI extraction failed: {e}")
 
-    return {
-        "unit_price": unit_price,
-        "delivery_days": delivery_days,
-        "payment_terms": payment_terms
-    }
+    return {"unit_price": unit_price, "delivery_days": delivery_days, "payment_terms": payment_terms}

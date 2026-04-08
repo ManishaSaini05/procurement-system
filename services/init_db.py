@@ -249,122 +249,227 @@
 
 # print("✅ Database initialized successfully")
 
+# """
+# init_db.py
+
+# Run once to create all tables in your PostgreSQL database.
+# Requires DATABASE_URL set in environment:
+#     export DATABASE_URL="postgresql://user:password@host:port/dbname"
+# """
+
+# import os
+# import psycopg2
+
+# #DATABASE_URL = "postgresql://neondb_owner:npg_BT0EdZg8QNWG@ep-restless-violet-amowt0f0-pooler.c-5.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require"
+# DATABASE_URL = os.getenv("DATABASE_URL")
+
+# if not DATABASE_URL:
+#     raise RuntimeError("DATABASE_URL environment variable not set.")
+
+# conn = psycopg2.connect(DATABASE_URL)
+# cursor = conn.cursor()
+
+# # =========================
+# # USERS (LOGIN)
+# # =========================
+# cursor.execute("""
+# CREATE TABLE IF NOT EXISTS users (
+#     id SERIAL PRIMARY KEY,
+#     username TEXT UNIQUE NOT NULL,
+#     password TEXT NOT NULL
+# )
+# """)
+
+# # =========================
+# # PROJECTS
+# # =========================
+# cursor.execute("""
+# CREATE TABLE IF NOT EXISTS projects (
+#     id SERIAL PRIMARY KEY,
+#     project_id TEXT UNIQUE NOT NULL,
+#     project_name TEXT
+# )
+# """)
+
+# # =========================
+# # VENDORS (master list)
+# # =========================
+# cursor.execute("""
+# CREATE TABLE IF NOT EXISTS vendors (
+#     id SERIAL PRIMARY KEY,
+#     vendor_name TEXT NOT NULL,
+#     email TEXT UNIQUE NOT NULL,
+#     phone TEXT
+# )
+# """)
+
+# # =========================
+# # RFQ MASTER
+# # =========================
+# cursor.execute("""
+# CREATE TABLE IF NOT EXISTS rfq_master (
+#     rfq_id SERIAL PRIMARY KEY,
+#     project_id INTEGER REFERENCES projects(id),
+#     material_name TEXT,
+#     quantity REAL,
+#     uom TEXT,
+#     specification TEXT,
+#     rfq_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+#     status TEXT,
+#     approval_status TEXT
+# )
+# """)
+
+# # =========================
+# # VENDOR QUOTES
+# # =========================
+# cursor.execute("""
+# CREATE TABLE IF NOT EXISTS vendor_quotes (
+#     id SERIAL PRIMARY KEY,
+#     rfq_id INTEGER REFERENCES rfq_master(rfq_id),
+#     vendor_name TEXT,
+#     vendor_email TEXT,
+#     unit_price REAL,
+#     quantity REAL DEFAULT 0,
+#     delivery_time TEXT,
+#     payment_terms TEXT,
+#     email_received_date TIMESTAMP,
+#     raw_email TEXT,
+#     status TEXT
+# )
+# """)
+
+# # =========================
+# # VENDOR APPROVALS
+# # =========================
+# cursor.execute("""
+# CREATE TABLE IF NOT EXISTS vendor_approvals (
+#     id SERIAL PRIMARY KEY,
+#     project_id INTEGER REFERENCES projects(id),
+#     material_name TEXT,
+#     vendor_name TEXT,
+#     unit_price REAL,
+#     delivery_time TEXT,
+#     payment_terms TEXT,
+#     status TEXT DEFAULT 'Pending'
+# )
+# """)
+
+# # =========================
+# # DEFAULT ADMIN USER
+# # =========================
+# cursor.execute("""
+# INSERT INTO users (username, password)
+# VALUES ('admin', 'admin123')
+# ON CONFLICT (username) DO NOTHING
+# """)
+
+# conn.commit()
+# conn.close()
+
+# print("✅ PostgreSQL database initialized successfully")
+# print("   Default login: admin / admin123  (change this in production!)")
+
+# New version #
+
 """
 init_db.py
-
-Run once to create all tables in your PostgreSQL database.
-Requires DATABASE_URL set in environment:
-    export DATABASE_URL="postgresql://user:password@host:port/dbname"
+Run once to create all tables.
+Usage:
+  Windows:   set DATABASE_URL=postgresql://... && python init_db.py
+  Mac/Linux: DATABASE_URL=postgresql://... python init_db.py
 """
-
 import os
 import psycopg2
 
-#DATABASE_URL = "postgresql://neondb_owner:npg_BT0EdZg8QNWG@ep-restless-violet-amowt0f0-pooler.c-5.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require"
-DATABASE_URL = os.getenv("DATABASE_URL")
+DATABASE_URL = "postgresql://neondb_owner:npg_BT0EdZg8QNWG@ep-restless-violet-amowt0f0-pooler.c-5.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require"
 if not DATABASE_URL:
-    raise RuntimeError("DATABASE_URL environment variable not set.")
+    raise RuntimeError("Set DATABASE_URL environment variable first.")
 
 conn = psycopg2.connect(DATABASE_URL)
 cursor = conn.cursor()
 
-# =========================
-# USERS (LOGIN)
-# =========================
 cursor.execute("""
 CREATE TABLE IF NOT EXISTS users (
-    id SERIAL PRIMARY KEY,
+    id       SERIAL PRIMARY KEY,
     username TEXT UNIQUE NOT NULL,
-    password TEXT NOT NULL
+    password TEXT NOT NULL,
+    role     TEXT DEFAULT 'procurement'
 )
 """)
 
-# =========================
-# PROJECTS
-# =========================
 cursor.execute("""
 CREATE TABLE IF NOT EXISTS projects (
-    id SERIAL PRIMARY KEY,
-    project_id TEXT UNIQUE NOT NULL,
+    id           SERIAL PRIMARY KEY,
+    project_id   TEXT UNIQUE NOT NULL,
     project_name TEXT
 )
 """)
 
-# =========================
-# VENDORS (master list)
-# =========================
-cursor.execute("""
-CREATE TABLE IF NOT EXISTS vendors (
-    id SERIAL PRIMARY KEY,
-    vendor_name TEXT NOT NULL,
-    email TEXT UNIQUE NOT NULL,
-    phone TEXT
-)
-""")
-
-# =========================
-# RFQ MASTER
-# =========================
 cursor.execute("""
 CREATE TABLE IF NOT EXISTS rfq_master (
-    rfq_id SERIAL PRIMARY KEY,
-    project_id INTEGER REFERENCES projects(id),
-    material_name TEXT,
-    quantity REAL,
-    uom TEXT,
-    specification TEXT,
-    rfq_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    status TEXT,
-    approval_status TEXT
+    rfq_id          SERIAL PRIMARY KEY,
+    project_id      INTEGER REFERENCES projects(id),
+    material_name   TEXT,
+    quantity        REAL,
+    uom             TEXT,
+    specification   TEXT,
+    rfq_date        TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    status          TEXT DEFAULT 'Sent',
+    approval_status TEXT DEFAULT 'Pending'
 )
 """)
 
-# =========================
-# VENDOR QUOTES
-# =========================
 cursor.execute("""
 CREATE TABLE IF NOT EXISTS vendor_quotes (
-    id SERIAL PRIMARY KEY,
-    rfq_id INTEGER REFERENCES rfq_master(rfq_id),
-    vendor_name TEXT,
-    vendor_email TEXT,
-    unit_price REAL,
-    quantity REAL DEFAULT 0,
-    delivery_time TEXT,
-    payment_terms TEXT,
+    id                  SERIAL PRIMARY KEY,
+    rfq_id              INTEGER REFERENCES rfq_master(rfq_id),
+    vendor_name         TEXT,
+    vendor_email        TEXT,
+    unit_price          REAL,
+    quantity            REAL DEFAULT 0,
+    delivery_time       TEXT,
+    payment_terms       TEXT,
     email_received_date TIMESTAMP,
-    raw_email TEXT,
-    status TEXT
+    raw_email           TEXT,
+    status              TEXT DEFAULT 'RFQ Sent',
+    round               INTEGER DEFAULT 1,
+    comments            TEXT
 )
 """)
 
-# =========================
-# VENDOR APPROVALS
-# =========================
 cursor.execute("""
 CREATE TABLE IF NOT EXISTS vendor_approvals (
-    id SERIAL PRIMARY KEY,
-    project_id INTEGER REFERENCES projects(id),
+    id            SERIAL PRIMARY KEY,
+    project_id    INTEGER,
     material_name TEXT,
-    vendor_name TEXT,
-    unit_price REAL,
+    vendor_name   TEXT,
+    unit_price    REAL,
     delivery_time TEXT,
     payment_terms TEXT,
-    status TEXT DEFAULT 'Pending'
+    status        TEXT DEFAULT 'Pending'
 )
 """)
 
-# =========================
-# DEFAULT ADMIN USER
-# =========================
 cursor.execute("""
-INSERT INTO users (username, password)
-VALUES ('admin', 'admin123')
+CREATE TABLE IF NOT EXISTS reverse_rfq (
+    id             SERIAL PRIMARY KEY,
+    rfq_id         INTEGER REFERENCES rfq_master(rfq_id),
+    vendor_name    TEXT,
+    vendor_email   TEXT,
+    comments       TEXT,
+    sent_date      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    reply_received BOOLEAN DEFAULT FALSE
+)
+""")
+
+cursor.execute("""
+INSERT INTO users (username, password, role)
+VALUES ('admin', 'admin123', 'procurement')
 ON CONFLICT (username) DO NOTHING
 """)
 
 conn.commit()
 conn.close()
-
-print("✅ PostgreSQL database initialized successfully")
-print("   Default login: admin / admin123  (change this in production!)")
+print("All tables created successfully.")
+print("Default login: admin / admin123")
