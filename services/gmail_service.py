@@ -2764,10 +2764,23 @@ def extract_email_content(msg):
             disposition = str(part.get("Content-Disposition", ""))
             filename    = part.get_filename() or ""
 
+            # if ctype == "text/plain" and "attachment" not in disposition:
+            #     payload = part.get_payload(decode=True)
+            #     if payload:
+            #         body = payload.decode(errors="ignore")
             if ctype == "text/plain" and "attachment" not in disposition:
                 payload = part.get_payload(decode=True)
                 if payload:
                     body = payload.decode(errors="ignore")
+
+            elif ctype == "text/html" and "attachment" not in disposition and not body:
+                payload = part.get_payload(decode=True)
+                if payload:
+                    # Strip HTML tags for plain text
+                    import re as re2
+                    html = payload.decode(errors="ignore")
+                    body = re2.sub(r'<[^>]+>', ' ', html)
+                    body = re2.sub(r'\s+', ' ', body).strip()
 
             elif ctype == "application/pdf" or filename.lower().endswith(".pdf"):
                 payload = part.get_payload(decode=True)
@@ -2811,6 +2824,9 @@ def get_pending_rfqs():
 
 
 def save_quote(rfq_id, sender_email, full_text, raw_body):
+    print(f"FULL TEXT LENGTH: {len(full_text)}")
+    print(f"RAW BODY LENGTH: {len(raw_body)}")
+    print(f"FULL TEXT PREVIEW: {full_text[:500]}")
     sender_email = sender_email.strip().lower()
     conn, cursor = get_cursor()
     try:
@@ -2877,8 +2893,8 @@ def fetch_rfq_replies():
         mail.select("inbox")
 
         # Search ALL emails with RFQ in subject — not just unseen
-        # _, messages = mail.search(None, 'SUBJECT "RFQ"')
-        _, messages = mail.search(None, 'ALL')
+         _, messages = mail.search(None, 'SUBJECT "RFQ"')
+        
         all_ids = messages[0].split()
         print(f"Total emails with RFQ in subject: {len(all_ids)}")
 
