@@ -3158,7 +3158,7 @@ def fetch_rfq_replies():
     processed = 0
 
     try:
-        mail.select("inbox")
+        mail.select('"[Gmail]/All Mail"')
 
         # Search ALL emails - no filter - so we never miss anything
         _, messages = mail.search(None, "ALL")
