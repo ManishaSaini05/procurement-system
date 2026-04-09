@@ -3611,31 +3611,65 @@ def materials_page():
 
         conn, cursor = get_cursor()
         try:
-            cursor.execute("""
-                INSERT INTO rfq_master
-                    (project_id, material_name, quantity, uom,
-                     specification, rfq_date, status)
-                VALUES (%s,%s,%s,%s,%s,CURRENT_TIMESTAMP,'Sent')
-            """, (
-                st.session_state.active_project_id,
-                selected_material,
-                float(quantity),
-                str(uom),
-                str(specification),
-            ))
-            cursor.execute("SELECT lastval() AS rfq_id")
-            rfq_id = cursor.fetchone()["rfq_id"]
+            # cursor.execute("""
+            #     INSERT INTO rfq_master
+            #         (project_id, material_name, quantity, uom,
+            #          specification, rfq_date, status)
+            #     VALUES (%s,%s,%s,%s,%s,CURRENT_TIMESTAMP,'Sent')
+            # """, (
+            #     st.session_state.active_project_id,
+            #     selected_material,
+            #     float(quantity),
+            #     str(uom),
+            #     str(specification),
+            # ))
+            # cursor.execute("SELECT lastval() AS rfq_id")
+            # rfq_id = cursor.fetchone()["rfq_id"]
 
+            # for _, row in selected_rows.iterrows():
+            #     vname  = row["vendor_name"]
+            #     vemail = row["email"]
+            #     sent = send_rfq_email(
+            #         vemail, vname, selected_material,
+            #         quantity, uom, specification,
+            #         rfq_id, st.session_state.project_sheet_id
+            #     )
+            #     if sent:
+            #         st.success(f"✅ RFQ sent to {vname}")
+            #     else:
+            #         st.error(f"❌ Failed: {vname}")
+
+            #     cursor.execute("""
+            #         INSERT INTO vendor_quotes (rfq_id, vendor_name, vendor_email, status)
+            #         VALUES (%s,%s,%s,'RFQ Sent')
+            #     """, (rfq_id, vname, vemail))
             for _, row in selected_rows.iterrows():
                 vname  = row["vendor_name"]
                 vemail = row["email"]
+
+                # Each vendor gets its own rfq_id
+                cursor.execute("""
+                    INSERT INTO rfq_master
+                        (project_id, material_name, quantity, uom,
+                         specification, rfq_date, status)
+                    VALUES (%s,%s,%s,%s,%s,CURRENT_TIMESTAMP,'Sent')
+                """, (
+                    st.session_state.active_project_id,
+                    selected_material,
+                    float(quantity),
+                    str(uom),
+                    str(specification),
+                ))
+                cursor.execute("SELECT lastval() AS rfq_id")
+                rfq_id = cursor.fetchone()["rfq_id"]
+
                 sent = send_rfq_email(
                     vemail, vname, selected_material,
                     quantity, uom, specification,
                     rfq_id, st.session_state.project_sheet_id
                 )
                 if sent:
-                    st.success(f"✅ RFQ sent to {vname}")
+                    st.success(f"✅ RFQ-{rfq_id} sent to {vname}")
                 else:
                     st.error(f"❌ Failed: {vname}")
 
