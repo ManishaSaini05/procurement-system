@@ -3142,17 +3142,25 @@ def fetch_rfq_replies():
         return
 
     # Build lookup: vendor_email_lower -> rfq_id
-    email_to_rfq = {
-        p["vendor_email"].strip().lower(): p["rfq_id"]
-        for p in pending
-    }
-    # Build lookup: rfq_id -> vendor_email
+    # email_to_rfq = {
+    #     p["vendor_email"].strip().lower(): p["rfq_id"]
+    #     for p in pending
+    # }
+    # # Build lookup: rfq_id -> vendor_email
+    # rfq_to_email = {
+    #     p["rfq_id"]: p["vendor_email"].strip().lower()
+    #     for p in pending
+    # }
+
+    # print(f"\nLooking for emails from: {list(email_to_rfq.keys())}")
+    # Build lookup: vendor_email_lower -> rfq_id
+   # Build lookup: rfq_id -> vendor_email
     rfq_to_email = {
         p["rfq_id"]: p["vendor_email"].strip().lower()
         for p in pending
     }
-
-    print(f"\nLooking for emails from: {list(email_to_rfq.keys())}")
+    pending_rfq_ids = set(rfq_to_email.keys())
+    print(f"\nPending RFQ IDs: {sorted(pending_rfq_ids)}")
 
     mail = get_gmail_connection()
     processed = 0
@@ -3182,26 +3190,48 @@ def fetch_rfq_replies():
                 print(f"  From    : {from_field}")
                 print(f"  Parsed  : {sender_email}")
 
+                # matched_rfq_id = None
+
+                # # Method 1: Match by sender email
+                # if sender_email in email_to_rfq:
+                #     matched_rfq_id = email_to_rfq[sender_email]
+                #     print(f"  MATCH by sender email -> RFQ-{matched_rfq_id}")
+
+                # # Method 2: Match by RFQ ID in subject
+                # if not matched_rfq_id:
+                #     m = re.search(r"RFQ[- ]?(\d+)", subject, re.IGNORECASE)
+                #     if m:
+                #         subject_rfq_id = int(m.group(1))
+                #         if subject_rfq_id in rfq_to_email:
+                #             matched_rfq_id = subject_rfq_id
+                #             print(f"  MATCH by RFQ ID in subject -> RFQ-{matched_rfq_id}")
+                #             # Use the stored vendor email for saving
+                #             sender_email = rfq_to_email[subject_rfq_id]
+
+                # if not matched_rfq_id:
+                #     print(f"  NO MATCH — skipping")
+                #     continue
                 matched_rfq_id = None
 
-                # Method 1: Match by sender email
-                if sender_email in email_to_rfq:
-                    matched_rfq_id = email_to_rfq[sender_email]
-                    print(f"  MATCH by sender email -> RFQ-{matched_rfq_id}")
-
-                # Method 2: Match by RFQ ID in subject
-                if not matched_rfq_id:
-                    m = re.search(r"RFQ[- ]?(\d+)", subject, re.IGNORECASE)
-                    if m:
-                        subject_rfq_id = int(m.group(1))
-                        if subject_rfq_id in rfq_to_email:
+# Match ONLY by RFQ ID in subject — most reliable method
+# Do NOT match by sender email alone as one person may send multiple RFQs
+                m = re.search(r"RFQ[- ]?(\d+)", subject, re.IGNORECASE)
+                if m:
+                    subject_rfq_id = int(m.group(1))
+                    if subject_rfq_id in pending_rfq_ids:
+        # Only accept if it is a REPLY (subject starts with Re:)
+                        if subject.strip().lower().startswith("re:"):
                             matched_rfq_id = subject_rfq_id
-                            print(f"  MATCH by RFQ ID in subject -> RFQ-{matched_rfq_id}")
-                            # Use the stored vendor email for saving
-                            sender_email = rfq_to_email[subject_rfq_id]
+                            sender_email   = rfq_to_email[subject_rfq_id]
+                            print(f"  MATCH by RFQ ID in subject (reply) -> RFQ-{matched_rfq_id}")
+                        else:
+                            print(f"  SKIP — RFQ-{subject_rfq_id} found but not a reply (no Re:)")
+                    else:
+                        print(f"  SKIP — RFQ-{subject_rfq_id} not in pending list")
+                else:
+                   print(f"  SKIP — no RFQ ID in subject")
 
                 if not matched_rfq_id:
-                    print(f"  NO MATCH — skipping")
                     continue
 
                 full_text, raw_body = extract_email_content(msg)
