@@ -2877,7 +2877,8 @@ def fetch_rfq_replies():
         mail.select("inbox")
 
         # Search ALL emails with RFQ in subject — not just unseen
-        _, messages = mail.search(None, 'SUBJECT "RFQ"')
+        # _, messages = mail.search(None, 'SUBJECT "RFQ"')
+        _, messages = mail.search(None, 'ALL')
         all_ids = messages[0].split()
         print(f"Total emails with RFQ in subject: {len(all_ids)}")
 
