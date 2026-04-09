@@ -2897,7 +2897,8 @@ def fetch_rfq_replies():
             sender  = msg.get("from", "")
 
             # Extract RFQ ID from subject
-            m = re.search(r"RFQ[- ]?(\d+)", subject, re.IGNORECASE)
+            # m = re.search(r"RFQ[- ]?(\d+)", subject, re.IGNORECASE)
+            m = re.search(r"RFQ[\-\—\– ]?(\d+)", subject, re.IGNORECASE)
             if not m:
                 continue
 
@@ -2912,8 +2913,18 @@ def fetch_rfq_replies():
             sender_email = (em[0] if em else sender).strip().lower()
 
             # Only process if this vendor email is pending for this RFQ
-            if sender_email not in pending_map[rfq_id]:
-                print(f"Skipping — {sender_email} not in pending list for RFQ-{rfq_id}")
+            # if sender_email not in pending_map[rfq_id]:
+            #     print(f"Skipping — {sender_email} not in pending list for RFQ-{rfq_id}")
+            #     continue
+            matched = False
+            for db_email in pending_map[rfq_id]:
+               if db_email in sender_email or sender_email in db_email:
+                    matched = True
+                    sender_email = db_email  # normalize
+                    break
+
+            if not matched:
+                print(f"Skipping — {sender_email} not matched for RFQ-{rfq_id}")
                 continue
 
             print(f"\nProcessing RFQ-{rfq_id} from {sender_email}")
