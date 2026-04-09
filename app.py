@@ -2349,24 +2349,44 @@ def load_boq():
 
 
 def load_vendor_history():
-    path = Path("data/past_vendor_data.xlsx")
-    if not path.exists():
+    conn, cursor = get_cursor()
+    cursor.execute("SELECT * FROM vendor_history ORDER BY date DESC")
+    rows = cursor.fetchall()
+    conn.close()
+    if not rows:
         return None
-    df = pd.read_excel(path)
-    df.columns = df.columns.str.strip()
-    return df
+    return pd.DataFrame([dict(r) for r in rows])
 
 
 def append_to_vendor_history(new_rows: list):
-    path = Path("data/past_vendor_data.xlsx")
-    Path("data").mkdir(exist_ok=True)
-    if path.exists():
-        existing = pd.read_excel(path)
-        existing.columns = existing.columns.str.strip()
-        updated = pd.concat([existing, pd.DataFrame(new_rows)], ignore_index=True)
-    else:
-        updated = pd.DataFrame(new_rows)
-    updated.to_excel(path, index=False)
+    conn, cursor = get_cursor()
+    try:
+        for row in new_rows:
+            cursor.execute("""
+                INSERT INTO vendor_history
+                    (vendor_name, email, material_name, project_name,
+                     project_id, unit_price, quantity, uom,
+                     delivery_time, payment_terms, date)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+            """, (
+                row.get("Vendor_Name"),
+                row.get("Email"),
+                row.get("Material_Name"),
+                row.get("Project_Name"),
+                str(row.get("Project_ID", "")),
+                row.get("Unit_Price"),
+                row.get("Quantity"),
+                row.get("uom", "Nos"),
+                row.get("Delivery_Time"),
+                row.get("Payment_Terms"),
+                row.get("Date"),
+            ))
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        print(f"Error saving vendor history: {e}")
+    finally:
+        conn.close()
 
 
 def check_login(username, password):
@@ -2648,17 +2668,17 @@ def materials_page():
         st.warning("No vendor history file (data/past_vendor_data.xlsx).")
         return
 
-    vendor_df["Material_Name"] = vendor_df["Material_Name"].str.strip().str.lower()
+    vendor_df["material_name"] = vendor_df["material_name"].str.strip().str.lower()
     mat_clean = selected_material.strip().lower()
-    filtered  = vendor_df[vendor_df["Material_Name"] == mat_clean].copy()
+    filtered  = vendor_df[vendor_df["material_name"] == mat_clean].copy()
 
     if filtered.empty:
         st.info(f"No past vendor history for '{selected_material}'.")
         return
 
     show_cols = [c for c in [
-        "Vendor_Name", "Email", "Project_Name", "Project_ID",
-        "Unit_Price", "Quantity", "Date"
+        "vendor_name", "email", "project_name", "project_id",
+        "unit_price", "quantity", "date"
     ] if c in filtered.columns]
 
     filtered["Select"] = False
@@ -2692,8 +2712,8 @@ def materials_page():
             rfq_id = cursor.fetchone()["rfq_id"]
 
             for _, row in selected_rows.iterrows():
-                vname  = row["Vendor_Name"]
-                vemail = row["Email"]
+                vname  = row["vendor_name"]
+                vemail = row["email"]
                 sent = send_rfq_email(
                     vemail, vname, selected_material,
                     quantity, uom, specification,
