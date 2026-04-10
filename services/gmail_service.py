@@ -3094,9 +3094,11 @@ def save_quote(rfq_id, sender_email, full_text, raw_body):
             print(f"  No DB match: rfq_id={rfq_id} vendor={sender_email}")
             return False
 
-        if row["status"] == "Quote Received":
-            print(f"  Already processed: rfq_id={rfq_id} vendor={sender_email}")
-            return False
+        # if row["status"] == "Quote Received":
+        #     print(f"  Already processed: rfq_id={rfq_id} vendor={sender_email}")
+        #     return False
+        # Always update — even if already received (handles revised quotes)
+        print(f"  Updating quote (status was: {row['status']})")
 
         print(f"  Extracting from email body ({len(raw_body)} chars)...")
         extracted = extract_vendor_quote(full_text)
