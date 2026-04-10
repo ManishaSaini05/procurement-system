@@ -595,25 +595,50 @@ Vendor message:
                 unit_price = candidate
                 break
 
-    # DELIVERY
+    # # DELIVERY
+    # delivery_patterns = [
+    #     r'delivery\s*(?:time|period|schedule)?\s*[:\-]?\s*([^\n\r.]{3,50})',
+    #     r'lead\s*time\s*[:\-]?\s*([^\n.]+)',
+    #     r'dispatch\s*(?:in|within)\s*([^\n.]+)',
+    #     r'(\d+)\s*(?:days?|weeks?)\s*(?:from|after|of)?\s*(?:po|purchase order|receipt)?',
+    # ]
+    # for pattern in delivery_patterns:
+    #     m = re.search(pattern, clean, re.IGNORECASE)
+    #     if m:
+    #         delivery_days = m.group(1).strip()[:100]
+    #         break
+
+    # # PAYMENT TERMS
+    # payment_patterns = [
+    #     r'payment\s*(?:terms?)?\s*[:\-]?\s*([^\n]+)',
+    #     r'(\d+\s*%\s*(?:advance|upfront)[^,\n]{0,50}(?:,[^,\n]{0,50})?)',
+    #     r'(advance[^,\n]{0,80})',
+    #     r'(\d+)\s*days?\s*credit',
+    # ]
+    # for pattern in payment_patterns:
+    #     m = re.search(pattern, clean, re.IGNORECASE)
+    #     if m:
+    #         payment_terms = m.group(1).strip()[:200]
+    #         break
+    # DELIVERY — stop at next field keyword
     delivery_patterns = [
-        r'delivery\s*(?:time|period|schedule)?\s*[:\-]?\s*([^\n\r.]{3,50})',
-        r'lead\s*time\s*[:\-]?\s*([^\n.]+)',
-        r'dispatch\s*(?:in|within)\s*([^\n.]+)',
-        r'(\d+)\s*(?:days?|weeks?)\s*(?:from|after|of)?\s*(?:po|purchase order|receipt)?',
+        r'delivery\s*(?:time|period)?\s*[:\-]\s*([\w\s]+?)(?=\s*(?:advance|payment|price|$))',
+        r'lead\s*time\s*[:\-]\s*([\w\s]+?)(?=\s*(?:advance|payment|price|$))',
+        r'(\d+\s*(?:days?|weeks?))\s*(?:from|after)?',
     ]
     for pattern in delivery_patterns:
         m = re.search(pattern, clean, re.IGNORECASE)
         if m:
-            delivery_days = m.group(1).strip()[:100]
+            delivery_days = m.group(1).strip()[:50]
             break
 
-    # PAYMENT TERMS
+# PAYMENT — capture advance/credit terms only
     payment_patterns = [
-        r'payment\s*(?:terms?)?\s*[:\-]?\s*([^\n]+)',
-        r'(\d+\s*%\s*(?:advance|upfront)[^,\n]{0,50}(?:,[^,\n]{0,50})?)',
-        r'(advance[^,\n]{0,80})',
-        r'(\d+)\s*days?\s*credit',
+        r'((?:\d+\s*%[^,\n]{0,40}(?:,\s*\d+\s*%[^,\n]{0,40})+))',
+        r'payment\s*(?:terms?)?\s*[:\-]\s*([^\n]{5,100})',
+        r'(\d+\s*%\s*advance[^\n]{0,60})',
+        r'(advance\s*[-:]\s*[^\n]{5,80})',
+        r'(\d+\s*days?\s*credit)',
     ]
     for pattern in payment_patterns:
         m = re.search(pattern, clean, re.IGNORECASE)
