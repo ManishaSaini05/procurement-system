@@ -3358,6 +3358,11 @@ def extract_email_content(msg):
                 if payload:
                     print(f"  PDF attachment: {filename}")
                     pdf_text = extract_pdf_text(payload)
+
+                    print(f"  PDF found: {filename} ({len(payload)} bytes)")
+                    pdf_text = extract_pdf_text(payload)
+                    print(f"  PDF text extracted: {len(pdf_text)} chars")
+                    print(f"  PDF preview: {pdf_text[:300]}")
     else:
         payload = msg.get_payload(decode=True)
         if payload:
