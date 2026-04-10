@@ -7710,13 +7710,18 @@ def costing_page():
     pid   = pdict[sel]
 
     cursor.execute("""
-        SELECT rm.material_name, rm.quantity, rm.uom, va.vendor_name, va.unit_price
+        SELECT DISTINCT ON (va.material_name)
+            va.material_name,
+            rm.quantity,
+            rm.uom,
+            va.vendor_name,
+            va.unit_price
         FROM vendor_approvals va
         JOIN rfq_master rm
             ON rm.project_id = va.project_id
             AND LOWER(TRIM(rm.material_name)) = LOWER(TRIM(va.material_name))
         WHERE va.project_id=%s AND va.status='Approved'
-        ORDER BY rm.material_name
+        ORDER BY va.material_name, va.id DESC
     """, (pid,))
     rows = cursor.fetchall()
     conn.close()
