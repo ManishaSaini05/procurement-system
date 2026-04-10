@@ -5054,7 +5054,7 @@ def main():
         else:                      projects_page()
 
 
-main()import streamlit as st
+import streamlit as st
 import pandas as pd
 from pathlib import Path
 from services.db import get_cursor
