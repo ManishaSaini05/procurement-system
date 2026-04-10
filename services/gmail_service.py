@@ -3064,14 +3064,30 @@ def extract_email_content(msg):
     return full_text, body
 
 
+# def get_pending_rfqs():
+#     """Return all vendor_quotes rows still in RFQ Sent status."""
+#     conn, cursor = get_cursor()
+#     try:
+#         cursor.execute("""
+#             SELECT vq.rfq_id, vq.vendor_email, vq.vendor_name
+#             FROM vendor_quotes vq
+#             WHERE vq.status = 'RFQ Sent'
+#             ORDER BY vq.rfq_id DESC
+#         """)
+#         return cursor.fetchall()
+#     finally:
+#         conn.close()
 def get_pending_rfqs():
-    """Return all vendor_quotes rows still in RFQ Sent status."""
+    """
+    Fetch ALL active vendor quotes — both RFQ Sent and Quote Received.
+    Quote Received included so revised quotes can be fetched.
+    """
     conn, cursor = get_cursor()
     try:
         cursor.execute("""
             SELECT vq.rfq_id, vq.vendor_email, vq.vendor_name
             FROM vendor_quotes vq
-            WHERE vq.status = 'RFQ Sent'
+            WHERE vq.status IN ('RFQ Sent', 'Quote Received')
             ORDER BY vq.rfq_id DESC
         """)
         return cursor.fetchall()
