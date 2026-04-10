@@ -2957,6 +2957,318 @@
 
 #     print(f"Done. Processed {processed} new quote(s).")
 
+# import re
+# import imaplib
+# import email
+# import email.header
+# import pdfplumber
+# import io
+# import streamlit as st
+
+# from services.db import get_cursor
+# from services.ai_extractor import extract_vendor_quote
+
+
+# def get_gmail_connection():
+#     mail = imaplib.IMAP4_SSL("imap.gmail.com")
+#     mail.login(st.secrets["SENDER_EMAIL"], st.secrets["SENDER_PASSWORD"])
+#     return mail
+
+
+# def decode_subject(subject):
+#     """Decode email subject which may be encoded."""
+#     if not subject:
+#         return ""
+#     decoded_parts = email.header.decode_header(subject)
+#     subject_str = ""
+#     for part, encoding in decoded_parts:
+#         if isinstance(part, bytes):
+#             subject_str += part.decode(encoding or "utf-8", errors="ignore")
+#         else:
+#             subject_str += str(part)
+#     return subject_str
+
+
+# def extract_sender_email(from_field):
+#     """Extract clean email address from From field."""
+#     if not from_field:
+#         return ""
+#     # Try <email> format first
+#     match = re.findall(r'<(.+?)>', from_field)
+#     if match:
+#         return match[0].strip().lower()
+#     # Fallback: whole field
+#     return from_field.strip().lower()
+
+
+# def extract_pdf_text(pdf_bytes):
+#     output = ""
+#     try:
+#         with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
+#             for i, page in enumerate(pdf.pages):
+#                 output += f"\n--- PAGE {i+1} ---\n"
+#                 text = page.extract_text()
+#                 if text:
+#                     output += text + "\n"
+#                 for table in page.extract_tables():
+#                     output += "\n[TABLE]\n"
+#                     for row in table:
+#                         clean = [str(c).strip() if c else "" for c in row]
+#                         non_empty = [c for c in clean if c]
+#                         if non_empty:
+#                             output += " | ".join(non_empty) + "\n"
+#                     output += "[/TABLE]\n"
+#     except Exception as e:
+#         print(f"PDF error: {e}")
+#     return output
+
+
+# def extract_email_content(msg):
+#     body     = ""
+#     pdf_text = ""
+
+#     if msg.is_multipart():
+#         for part in msg.walk():
+#             ctype       = part.get_content_type()
+#             disposition = str(part.get("Content-Disposition", ""))
+#             filename    = part.get_filename() or ""
+
+#             if ctype == "text/plain" and "attachment" not in disposition:
+#                 payload = part.get_payload(decode=True)
+#                 if payload:
+#                     body = payload.decode(errors="ignore")
+
+#             elif ctype == "text/html" and "attachment" not in disposition and not body:
+#                 payload = part.get_payload(decode=True)
+#                 if payload:
+#                     html = payload.decode(errors="ignore")
+#                     body = re.sub(r'<[^>]+>', ' ', html)
+#                     body = re.sub(r'\s+', ' ', body).strip()
+
+#             elif ctype == "application/pdf" or filename.lower().endswith(".pdf"):
+#                 payload = part.get_payload(decode=True)
+#                 if payload:
+#                     print(f"  PDF attachment: {filename}")
+#                     pdf_text = extract_pdf_text(payload)
+#     else:
+#         payload = msg.get_payload(decode=True)
+#         if payload:
+#             body = payload.decode(errors="ignore")
+
+#     full_text = ""
+#     if body:
+#         full_text += f"EMAIL BODY:\n{body}\n\n"
+#     if pdf_text:
+#         full_text += f"PDF QUOTATION:\n{pdf_text}\n"
+
+#     return full_text, body
+
+
+# # def get_pending_rfqs():
+# #     """Return all vendor_quotes rows still in RFQ Sent status."""
+# #     conn, cursor = get_cursor()
+# #     try:
+# #         cursor.execute("""
+# #             SELECT vq.rfq_id, vq.vendor_email, vq.vendor_name
+# #             FROM vendor_quotes vq
+# #             WHERE vq.status = 'RFQ Sent'
+# #             ORDER BY vq.rfq_id DESC
+# #         """)
+# #         return cursor.fetchall()
+# #     finally:
+# #         conn.close()
+# def get_pending_rfqs():
+#     """
+#     Fetch ALL active vendor quotes — both RFQ Sent and Quote Received.
+#     Quote Received included so revised quotes can be fetched.
+#     """
+#     conn, cursor = get_cursor()
+#     try:
+#         cursor.execute("""
+#             SELECT vq.rfq_id, vq.vendor_email, vq.vendor_name
+#             FROM vendor_quotes vq
+#             WHERE vq.status IN ('RFQ Sent', 'Quote Received')
+#             ORDER BY vq.rfq_id DESC
+#         """)
+#         return cursor.fetchall()
+#     finally:
+#         conn.close()
+
+
+# def save_quote(rfq_id, sender_email, full_text, raw_body):
+#     sender_email = sender_email.strip().lower()
+#     conn, cursor = get_cursor()
+#     try:
+#         cursor.execute("""
+#             SELECT id, status FROM vendor_quotes
+#             WHERE rfq_id=%s AND LOWER(vendor_email)=%s
+#             ORDER BY id DESC LIMIT 1
+#         """, (rfq_id, sender_email))
+#         row = cursor.fetchone()
+
+#         if not row:
+#             print(f"  No DB match: rfq_id={rfq_id} vendor={sender_email}")
+#             return False
+
+#         # if row["status"] == "Quote Received":
+#         #     print(f"  Already processed: rfq_id={rfq_id} vendor={sender_email}")
+#         #     return False
+#         # Always update — even if already received (handles revised quotes)
+#         print(f"  Updating quote (status was: {row['status']})")
+
+#         print(f"  Extracting from email body ({len(raw_body)} chars)...")
+#         extracted = extract_vendor_quote(full_text)
+#         print(f"  Result: {extracted}")
+
+#         cursor.execute("""
+#             UPDATE vendor_quotes
+#             SET unit_price          = %s,
+#                 delivery_time       = %s,
+#                 payment_terms       = %s,
+#                 raw_email           = %s,
+#                 email_received_date = CURRENT_TIMESTAMP,
+#                 status              = 'Quote Received'
+#             WHERE rfq_id = %s AND LOWER(vendor_email) = %s
+#         """, (
+#             extracted.get("unit_price"),
+#             extracted.get("delivery_days"),
+#             extracted.get("payment_terms"),
+#             raw_body, rfq_id, sender_email
+#         ))
+#         conn.commit()
+#         print(f"  SAVED successfully.")
+#         return True
+
+#     except Exception as e:
+#         conn.rollback()
+#         print(f"  Save error: {e}")
+#         raise e
+#     finally:
+#         conn.close()
+
+
+# def fetch_rfq_replies():
+#     print("\n======== FETCH RFQ REPLIES START ========")
+
+#     pending = get_pending_rfqs()
+#     print(f"Pending RFQs in DB: {len(pending)}")
+#     for p in pending:
+#         print(f"  RFQ-{p['rfq_id']} | {p['vendor_name']} | {p['vendor_email']}")
+
+#     if not pending:
+#         print("Nothing pending. Done.")
+#         return
+
+#     # Build lookup: vendor_email_lower -> rfq_id
+#     # email_to_rfq = {
+#     #     p["vendor_email"].strip().lower(): p["rfq_id"]
+#     #     for p in pending
+#     # }
+#     # # Build lookup: rfq_id -> vendor_email
+#     # rfq_to_email = {
+#     #     p["rfq_id"]: p["vendor_email"].strip().lower()
+#     #     for p in pending
+#     # }
+
+#     # print(f"\nLooking for emails from: {list(email_to_rfq.keys())}")
+#     # Build lookup: vendor_email_lower -> rfq_id
+#    # Build lookup: rfq_id -> vendor_email
+#     rfq_to_email = {
+#         p["rfq_id"]: p["vendor_email"].strip().lower()
+#         for p in pending
+#     }
+#     pending_rfq_ids = set(rfq_to_email.keys())
+#     print(f"\nPending RFQ IDs: {sorted(pending_rfq_ids)}")
+
+#     mail = get_gmail_connection()
+#     processed = 0
+
+#     try:
+#         mail.select('"[Gmail]/All Mail"')
+
+#         # Search ALL emails - no filter - so we never miss anything
+#         _, messages = mail.search(None, "ALL")
+#         all_ids = messages[0].split()
+#         print(f"Total emails in inbox: {len(all_ids)}")
+
+#         # Only check last 100 emails to avoid timeout
+#         check_ids = all_ids[-100:]
+#         print(f"Checking last {len(check_ids)} emails...")
+
+#         for num in check_ids:
+#             try:
+#                 _, msg_data = mail.fetch(num, "(RFC822)")
+#                 msg = email.message_from_bytes(msg_data[0][1])
+
+#                 subject      = decode_subject(msg.get("subject", ""))
+#                 from_field   = msg.get("from", "")
+#                 sender_email = extract_sender_email(from_field)
+
+#                 print(f"\n  Subject : {subject}")
+#                 print(f"  From    : {from_field}")
+#                 print(f"  Parsed  : {sender_email}")
+
+#                 # matched_rfq_id = None
+
+#                 # # Method 1: Match by sender email
+#                 # if sender_email in email_to_rfq:
+#                 #     matched_rfq_id = email_to_rfq[sender_email]
+#                 #     print(f"  MATCH by sender email -> RFQ-{matched_rfq_id}")
+
+#                 # # Method 2: Match by RFQ ID in subject
+#                 # if not matched_rfq_id:
+#                 #     m = re.search(r"RFQ[- ]?(\d+)", subject, re.IGNORECASE)
+#                 #     if m:
+#                 #         subject_rfq_id = int(m.group(1))
+#                 #         if subject_rfq_id in rfq_to_email:
+#                 #             matched_rfq_id = subject_rfq_id
+#                 #             print(f"  MATCH by RFQ ID in subject -> RFQ-{matched_rfq_id}")
+#                 #             # Use the stored vendor email for saving
+#                 #             sender_email = rfq_to_email[subject_rfq_id]
+
+#                 # if not matched_rfq_id:
+#                 #     print(f"  NO MATCH — skipping")
+#                 #     continue
+#                 matched_rfq_id = None
+
+# # Match ONLY by RFQ ID in subject — most reliable method
+# # Do NOT match by sender email alone as one person may send multiple RFQs
+#                 m = re.search(r"RFQ[- ]?(\d+)", subject, re.IGNORECASE)
+#                 if m:
+#                     subject_rfq_id = int(m.group(1))
+#                     if subject_rfq_id in pending_rfq_ids:
+#         # Only accept if it is a REPLY (subject starts with Re:)
+#                         if subject.strip().lower().startswith("re:"):
+#                             matched_rfq_id = subject_rfq_id
+#                             sender_email   = rfq_to_email[subject_rfq_id]
+#                             print(f"  MATCH by RFQ ID in subject (reply) -> RFQ-{matched_rfq_id}")
+#                         else:
+#                             print(f"  SKIP — RFQ-{subject_rfq_id} found but not a reply (no Re:)")
+#                     else:
+#                         print(f"  SKIP — RFQ-{subject_rfq_id} not in pending list")
+#                 else:
+#                    print(f"  SKIP — no RFQ ID in subject")
+
+#                 if not matched_rfq_id:
+#                     continue
+
+#                 full_text, raw_body = extract_email_content(msg)
+#                 print(f"  Body length: {len(raw_body)}")
+
+#                 saved = save_quote(matched_rfq_id, sender_email, full_text, raw_body)
+#                 if saved:
+#                     processed += 1
+
+#             except Exception as e:
+#                 print(f"  Error processing email: {e}")
+#                 continue
+
+#     finally:
+#         mail.logout()
+
+#     print(f"\n======== DONE — {processed} quote(s) saved ========\n")
+#     return processed
+
 import re
 import imaplib
 import email
@@ -2976,7 +3288,6 @@ def get_gmail_connection():
 
 
 def decode_subject(subject):
-    """Decode email subject which may be encoded."""
     if not subject:
         return ""
     decoded_parts = email.header.decode_header(subject)
@@ -2990,14 +3301,11 @@ def decode_subject(subject):
 
 
 def extract_sender_email(from_field):
-    """Extract clean email address from From field."""
     if not from_field:
         return ""
-    # Try <email> format first
     match = re.findall(r'<(.+?)>', from_field)
     if match:
         return match[0].strip().lower()
-    # Fallback: whole field
     return from_field.strip().lower()
 
 
@@ -3064,28 +3372,13 @@ def extract_email_content(msg):
     return full_text, body
 
 
-# def get_pending_rfqs():
-#     """Return all vendor_quotes rows still in RFQ Sent status."""
-#     conn, cursor = get_cursor()
-#     try:
-#         cursor.execute("""
-#             SELECT vq.rfq_id, vq.vendor_email, vq.vendor_name
-#             FROM vendor_quotes vq
-#             WHERE vq.status = 'RFQ Sent'
-#             ORDER BY vq.rfq_id DESC
-#         """)
-#         return cursor.fetchall()
-#     finally:
-#         conn.close()
-def get_pending_rfqs():
-    """
-    Fetch ALL active vendor quotes — both RFQ Sent and Quote Received.
-    Quote Received included so revised quotes can be fetched.
-    """
+def get_active_rfqs():
+    """Fetch all RFQ Sent + Quote Received vendor quotes."""
     conn, cursor = get_cursor()
     try:
         cursor.execute("""
-            SELECT vq.rfq_id, vq.vendor_email, vq.vendor_name
+            SELECT vq.rfq_id, vq.vendor_email, vq.vendor_name, 
+                   vq.status, vq.email_message_id
             FROM vendor_quotes vq
             WHERE vq.status IN ('RFQ Sent', 'Quote Received')
             ORDER BY vq.rfq_id DESC
@@ -3095,7 +3388,22 @@ def get_pending_rfqs():
         conn.close()
 
 
-def save_quote(rfq_id, sender_email, full_text, raw_body):
+def is_already_processed(rfq_id, message_id):
+    """Check if this exact email was already saved."""
+    if not message_id:
+        return False
+    conn, cursor = get_cursor()
+    try:
+        cursor.execute("""
+            SELECT id FROM vendor_quotes
+            WHERE rfq_id=%s AND email_message_id=%s
+        """, (rfq_id, message_id))
+        return cursor.fetchone() is not None
+    finally:
+        conn.close()
+
+
+def save_quote(rfq_id, sender_email, full_text, raw_body, message_id):
     sender_email = sender_email.strip().lower()
     conn, cursor = get_cursor()
     try:
@@ -3110,15 +3418,11 @@ def save_quote(rfq_id, sender_email, full_text, raw_body):
             print(f"  No DB match: rfq_id={rfq_id} vendor={sender_email}")
             return False
 
-        # if row["status"] == "Quote Received":
-        #     print(f"  Already processed: rfq_id={rfq_id} vendor={sender_email}")
-        #     return False
-        # Always update — even if already received (handles revised quotes)
-        print(f"  Updating quote (status was: {row['status']})")
+        print(f"  Updating quote for RFQ-{rfq_id} (was: {row['status']})")
+        print(f"  Extracting from {len(raw_body)} chars...")
 
-        print(f"  Extracting from email body ({len(raw_body)} chars)...")
         extracted = extract_vendor_quote(full_text)
-        print(f"  Result: {extracted}")
+        print(f"  Extracted: {extracted}")
 
         cursor.execute("""
             UPDATE vendor_quotes
@@ -3127,16 +3431,20 @@ def save_quote(rfq_id, sender_email, full_text, raw_body):
                 payment_terms       = %s,
                 raw_email           = %s,
                 email_received_date = CURRENT_TIMESTAMP,
-                status              = 'Quote Received'
+                status              = 'Quote Received',
+                email_message_id    = %s
             WHERE rfq_id = %s AND LOWER(vendor_email) = %s
         """, (
             extracted.get("unit_price"),
             extracted.get("delivery_days"),
             extracted.get("payment_terms"),
-            raw_body, rfq_id, sender_email
+            raw_body,
+            message_id,
+            rfq_id,
+            sender_email
         ))
         conn.commit()
-        print(f"  SAVED successfully.")
+        print(f"  SAVED: Price={extracted.get('unit_price')} | Delivery={extracted.get('delivery_days')} | Payment={extracted.get('payment_terms')}")
         return True
 
     except Exception as e:
@@ -3150,35 +3458,28 @@ def save_quote(rfq_id, sender_email, full_text, raw_body):
 def fetch_rfq_replies():
     print("\n======== FETCH RFQ REPLIES START ========")
 
-    pending = get_pending_rfqs()
-    print(f"Pending RFQs in DB: {len(pending)}")
-    for p in pending:
-        print(f"  RFQ-{p['rfq_id']} | {p['vendor_name']} | {p['vendor_email']}")
+    active = get_active_rfqs()
+    print(f"Active RFQs in DB: {len(active)}")
+    for p in active:
+        print(f"  RFQ-{p['rfq_id']} | {p['vendor_name']} | {p['vendor_email']} | {p['status']}")
 
-    if not pending:
-        print("Nothing pending. Done.")
-        return
+    if not active:
+        print("No active RFQs. Done.")
+        return 0
 
-    # Build lookup: vendor_email_lower -> rfq_id
-    # email_to_rfq = {
-    #     p["vendor_email"].strip().lower(): p["rfq_id"]
-    #     for p in pending
-    # }
-    # # Build lookup: rfq_id -> vendor_email
-    # rfq_to_email = {
-    #     p["rfq_id"]: p["vendor_email"].strip().lower()
-    #     for p in pending
-    # }
-
-    # print(f"\nLooking for emails from: {list(email_to_rfq.keys())}")
-    # Build lookup: vendor_email_lower -> rfq_id
-   # Build lookup: rfq_id -> vendor_email
+    # Build lookup: rfq_id -> vendor_email
     rfq_to_email = {
         p["rfq_id"]: p["vendor_email"].strip().lower()
-        for p in pending
+        for p in active
     }
+    # Track already processed message IDs per rfq
+    processed_msg_ids = {
+        p["rfq_id"]: p["email_message_id"]
+        for p in active
+    }
+
     pending_rfq_ids = set(rfq_to_email.keys())
-    print(f"\nPending RFQ IDs: {sorted(pending_rfq_ids)}")
+    print(f"\nWatching RFQ IDs: {sorted(pending_rfq_ids)}")
 
     mail = get_gmail_connection()
     processed = 0
@@ -3186,13 +3487,12 @@ def fetch_rfq_replies():
     try:
         mail.select('"[Gmail]/All Mail"')
 
-        # Search ALL emails - no filter - so we never miss anything
         _, messages = mail.search(None, "ALL")
         all_ids = messages[0].split()
-        print(f"Total emails in inbox: {len(all_ids)}")
+        print(f"Total emails found: {len(all_ids)}")
 
-        # Only check last 100 emails to avoid timeout
-        check_ids = all_ids[-100:]
+        # Check last 200 emails
+        check_ids = all_ids[-200:]
         print(f"Checking last {len(check_ids)} emails...")
 
         for num in check_ids:
@@ -3200,71 +3500,57 @@ def fetch_rfq_replies():
                 _, msg_data = mail.fetch(num, "(RFC822)")
                 msg = email.message_from_bytes(msg_data[0][1])
 
-                subject      = decode_subject(msg.get("subject", ""))
-                from_field   = msg.get("from", "")
+                subject    = decode_subject(msg.get("subject", ""))
+                from_field = msg.get("from", "")
+                message_id = msg.get("message-id", "").strip()
+
                 sender_email = extract_sender_email(from_field)
+
+                # Only process replies (subject starts with Re:)
+                if not subject.strip().lower().startswith("re:"):
+                    continue
+
+                # Must have RFQ ID in subject
+                m = re.search(r"RFQ[- ]?(\d+)", subject, re.IGNORECASE)
+                if not m:
+                    continue
+
+                subject_rfq_id = int(m.group(1))
+
+                if subject_rfq_id not in pending_rfq_ids:
+                    continue
 
                 print(f"\n  Subject : {subject}")
                 print(f"  From    : {from_field}")
-                print(f"  Parsed  : {sender_email}")
+                print(f"  Msg-ID  : {message_id}")
 
-                # matched_rfq_id = None
-
-                # # Method 1: Match by sender email
-                # if sender_email in email_to_rfq:
-                #     matched_rfq_id = email_to_rfq[sender_email]
-                #     print(f"  MATCH by sender email -> RFQ-{matched_rfq_id}")
-
-                # # Method 2: Match by RFQ ID in subject
-                # if not matched_rfq_id:
-                #     m = re.search(r"RFQ[- ]?(\d+)", subject, re.IGNORECASE)
-                #     if m:
-                #         subject_rfq_id = int(m.group(1))
-                #         if subject_rfq_id in rfq_to_email:
-                #             matched_rfq_id = subject_rfq_id
-                #             print(f"  MATCH by RFQ ID in subject -> RFQ-{matched_rfq_id}")
-                #             # Use the stored vendor email for saving
-                #             sender_email = rfq_to_email[subject_rfq_id]
-
-                # if not matched_rfq_id:
-                #     print(f"  NO MATCH — skipping")
-                #     continue
-                matched_rfq_id = None
-
-# Match ONLY by RFQ ID in subject — most reliable method
-# Do NOT match by sender email alone as one person may send multiple RFQs
-                m = re.search(r"RFQ[- ]?(\d+)", subject, re.IGNORECASE)
-                if m:
-                    subject_rfq_id = int(m.group(1))
-                    if subject_rfq_id in pending_rfq_ids:
-        # Only accept if it is a REPLY (subject starts with Re:)
-                        if subject.strip().lower().startswith("re:"):
-                            matched_rfq_id = subject_rfq_id
-                            sender_email   = rfq_to_email[subject_rfq_id]
-                            print(f"  MATCH by RFQ ID in subject (reply) -> RFQ-{matched_rfq_id}")
-                        else:
-                            print(f"  SKIP — RFQ-{subject_rfq_id} found but not a reply (no Re:)")
-                    else:
-                        print(f"  SKIP — RFQ-{subject_rfq_id} not in pending list")
-                else:
-                   print(f"  SKIP — no RFQ ID in subject")
-
-                if not matched_rfq_id:
+                # Skip if this exact email was already processed
+                if message_id and processed_msg_ids.get(subject_rfq_id) == message_id:
+                    print(f"  SKIP — same email already processed (Message-ID matches)")
                     continue
 
-                full_text, raw_body = extract_email_content(msg)
-                print(f"  Body length: {len(raw_body)}")
+                # Use stored vendor email for DB update
+                vendor_email = rfq_to_email[subject_rfq_id]
+                print(f"  MATCH -> RFQ-{subject_rfq_id} | vendor: {vendor_email}")
 
-                saved = save_quote(matched_rfq_id, sender_email, full_text, raw_body)
+                full_text, raw_body = extract_email_content(msg)
+                print(f"  Body: {len(raw_body)} chars")
+
+                saved = save_quote(
+                    subject_rfq_id, vendor_email,
+                    full_text, raw_body, message_id
+                )
                 if saved:
                     processed += 1
+                    # Update local cache so duplicate emails in same fetch are skipped
+                    processed_msg_ids[subject_rfq_id] = message_id
 
             except Exception as e:
-                print(f"  Error processing email: {e}")
+                print(f"  Error: {e}")
                 continue
 
     finally:
         mail.logout()
 
-    print(f"\n======== DONE — {processed} quote(s) saved ========\n")
+    print(f"\n======== DONE — {processed} quote(s) updated ========\n")
     return processed
