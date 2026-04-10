@@ -577,6 +577,8 @@ Vendor message:
     payment_terms = None
 
     clean = text.replace("\n", " ").replace(",", "")
+# Remove Gmail quoted reply thread (everything after "On Mon/Tue/... wrote:")
+    clean = re.split(r'On\s+\w+.*?wrote:', clean, flags=re.IGNORECASE)[0]
 
     # PRICE — look for "NNNN per wp/nos/piece/unit" pattern
     # This avoids picking up wattage like 570wp
@@ -632,16 +634,18 @@ Vendor message:
             delivery_days = m.group(1).strip()[:50]
             break
 
-# PAYMENT — capture advance/credit terms only
+# Strip quoted reply text before extracting (removes "On Fri... wrote:" and below)
+    clean_no_quote = re.split(r'On\s+\w+.*?wrote:', clean, flags=re.IGNORECASE)[0]
+
     payment_patterns = [
-        r'((?:\d+\s*%[^,\n]{0,40}(?:,\s*\d+\s*%[^,\n]{0,40})+))',
-        r'payment\s*(?:terms?)?\s*[:\-]\s*([^\n]{5,100})',
-        r'(\d+\s*%\s*advance[^\n]{0,60})',
-        r'(advance\s*[-:]\s*[^\n]{5,80})',
+        r'((?:\d+\s*%[^.\n]{0,40}(?:[.,]\s*\d+\s*%[^.\n]{0,40})+))',
+        r'payment\s*(?:terms?)?\s*[:\-]\s*([^.\n]{5,100})',
+        r'(\d+\s*%\s*advance[^.\n]{0,80})',
+        r'(advance\s*[-:]\s*[^.\n]{5,80})',
         r'(\d+\s*days?\s*credit)',
     ]
     for pattern in payment_patterns:
-        m = re.search(pattern, clean, re.IGNORECASE)
+        m = re.search(pattern, clean_no_quote, re.IGNORECASE)
         if m:
             payment_terms = m.group(1).strip()[:200]
             break
