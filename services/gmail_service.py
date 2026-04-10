@@ -3429,6 +3429,9 @@ def save_quote(rfq_id, sender_email, full_text, raw_body, message_id):
         extracted = extract_vendor_quote(full_text)
         print(f"  Extracted: {extracted}")
 
+        print(f"  Full text sent to AI ({len(full_text)} chars):")
+        print(f"  {full_text[:500]}")
+
         cursor.execute("""
             UPDATE vendor_quotes
             SET unit_price          = %s,
