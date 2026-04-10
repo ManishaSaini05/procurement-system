@@ -597,7 +597,7 @@ Vendor message:
 
     # DELIVERY
     delivery_patterns = [
-        r'delivery\s*(?:time|period|schedule)?\s*[:\-]?\s*([^\n.]+)',
+        r'delivery\s*(?:time|period|schedule)?\s*[:\-]?\s*([^\n\r.]{3,50})',
         r'lead\s*time\s*[:\-]?\s*([^\n.]+)',
         r'dispatch\s*(?:in|within)\s*([^\n.]+)',
         r'(\d+)\s*(?:days?|weeks?)\s*(?:from|after|of)?\s*(?:po|purchase order|receipt)?',
@@ -611,8 +611,8 @@ Vendor message:
     # PAYMENT TERMS
     payment_patterns = [
         r'payment\s*(?:terms?)?\s*[:\-]?\s*([^\n]+)',
-        r'(\d+)\s*%\s*(?:advance|upfront)[^\n]*',
-        r'(advance[^\n]+)',
+        r'(\d+\s*%\s*(?:advance|upfront)[^,\n]{0,50}(?:,[^,\n]{0,50})?)',
+        r'(advance[^,\n]{0,80})',
         r'(\d+)\s*days?\s*credit',
     ]
     for pattern in payment_patterns:
