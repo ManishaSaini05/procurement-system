@@ -8479,7 +8479,7 @@ def comparison_page():
                 conn.close()
 
     with col2:
-        if st.button("📨 Send Reverse RFQ", use_container_width=True):
+        if st.button("📨 Send Revised RFQ", use_container_width=True):
             sel_rows = edited[edited["Select"] == True]
             if sel_rows.empty:
                 st.warning("Select vendors first.")
@@ -8543,7 +8543,7 @@ def comparison_page():
     # Reverse RFQ form
     if st.session_state.show_reverse_form:
         st.markdown("---")
-        st.markdown("### 📨 Reverse RFQ — Negotiation")
+        st.markdown("### 📨 Revise RFQ — Negotiation")
         comments = st.text_area(
             "Comments to send to vendor",
             placeholder="Your price is above target. Please resubmit your best offer.",
