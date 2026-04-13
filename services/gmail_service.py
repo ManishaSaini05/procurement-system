@@ -3499,8 +3499,8 @@ def fetch_rfq_replies():
         all_ids = messages[0].split()
         print(f"Total emails found: {len(all_ids)}")
 
-        # Check last 200 emails
-        check_ids = all_ids[-200:]
+        # Check last 20 emails
+        check_ids = all_ids[-20:]
         print(f"Checking last {len(check_ids)} emails...")
 
         for num in check_ids:
